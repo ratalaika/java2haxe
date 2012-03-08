@@ -71,10 +71,13 @@ enum ExprExpr
 	JInnerDecl( def : Definition );
 }
 
-enum T {
+typedef T = {
+	final:Bool, t:TPath
+}
+
+enum TPath {
 	TPath( p : Array<String>, params : TParams);
-	TArray( of : T );
-	TFinal( of : T );
+	TArray( of : TPath );
 }
 
 enum TArg {

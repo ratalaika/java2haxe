@@ -481,12 +481,12 @@ class Parser {
 						var name = null;
 						if (peek() == TPOpen) //it's the constructor
 						{
-							name = switch(t)
+							name = switch(t.t)
 							{
 							case TPath(p, _): p[0];
 							default: throw "assert";
 							};
-							t = TPath(["void"], []);
+							t.t = TPath(["void"], []);
 						} else {
 							name = this.id();
 						}
@@ -639,7 +639,8 @@ class Parser {
 			}
 		}
 		
-		return (isFinal) ? TFinal(ret) : ret;
+		
+		return { final : isFinal, t: ret };
 	}
 	
 	function parseFunArgs(): { args:Array<{name:String, t:T}>, varArgs: Null<{ name:String, t:T }> }
@@ -980,7 +981,7 @@ class Parser {
 					
 					while (opt(TBkOpen))
 					{
-						t = TArray(t);
+						t.t = TArray(t.t);
 						if (opt(TBkClose))
 						{
 							lens.push(null);
