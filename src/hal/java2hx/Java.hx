@@ -33,57 +33,63 @@ typedef Pos = {
 enum Const {
 	CInt( v : String );
 	CFloat( f : String );
+	CSingle( f : String );
 	CString( s : String );
 }
 
-#if J2HX_PARSE_POS 
 typedef Expr = { expr : ExprExpr, pos: Pos };
 
 enum ExprExpr 
-#else
-enum Expr
-#end
 {
 	JConst( c : Const );
 	JIdent( v : String );
 	JVars( vars : Array<{ name : String, t : T, val : Null<Expr> }> );
 	JParent( e : Expr );
 	JBlock( e : Array<Expr> );
+	JSynchronized ( e : Array<Expr> );
 	JField( e : Expr, f : String );
 	JBinop( op : String, e1 : Expr, e2 : Expr );
 	JUnop( op : String, prefix : Bool, e : Expr );
 	JCall( e : Expr, tparams:TParams, params : Array<Expr> );
 	JIf( cond : Expr, e1 : Expr, ?e2 : Expr );
 	JTernary( cond : Expr, e1 : Expr, ?e2 : Expr );
-	JWhile( cond : Expr, e : Expr, doWhile : Bool );
-	JFor( inits : Array<Expr>, conds : Array<Expr>, incrs : Array<Expr>, e : Expr );
-	JForEach( t : T, name : String, inExpr : Expr, block : Expr );
+	JWhile( cond : Expr, e : Expr, doWhile : Bool, ?label:String );
+	JFor( inits : Array<Expr>, conds : Array<Expr>, incrs : Array<Expr>, e : Expr, ?label:String );
+	JForEach( t : T, name : String, inExpr : Expr, block : Expr, ?label:String );
 	JBreak( ?label : String );
-	JContinue;
-	JFunction( f : Function, name : Null<String> );
+	JContinue( ?label : String );
 	JReturn( ?e : Expr );
 	JArray( e : Expr, index : Expr );
-	JArrayDecl( e : Array<Expr> );
-	JNew( t : T, params : Array<Expr>, anonClass:Null<ClassDef> );
+	JArrayDecl( t : T, lens : Null<Array<Expr>>, e : Null<Array<Expr>> );
+	JNewAnon( def : { fields : Array<ClassField>, staticInit : Null<Expr>, instInit : Null<Expr> } );
+	JNew( t : T, params : Array<Expr> );
 	JThrow( e : Expr );
-	JTry( e : Expr, catches : Array<{ name : String, t : Null<T>, e : Expr }> );
+	JTry( e : Expr, catches : Array<{ name : String, t : T, e: Expr } >, finally : Expr );
 	JSwitch( e : Expr, cases : Array<{ val : Expr, el : Array<Expr> }>, def : Null<Array<Expr>> );
-	JLabel( name : String );
 	JComment( s : String, isBlock: Bool );
+	JAssert( e : Expr, ?ifFalse : Expr );
+	JInnerDecl( def : Definition );
 }
 
 enum T {
-	TArray( of : T );
 	TPath( p : Array<String>, params : TParams);
-	TComplex( e : Expr );
+	TArray( of : T );
+	TFinal( of : T );
 }
 
-enum TGeneric {
-	GType( t : T );
-	GWildcard( ?tExtends : T );
+enum TArg {
+	AType( t : T );
+	AWildcard;
+	AWildcardExtends( t : T );
+	AWildcardSuper( t : T );
 }
 
-typedef TParams = Null<Array<TGeneric>>;
+typedef TParams = Null<Array<TArg>>;
+
+typedef GenericDecl = {
+	name : String,
+	extend : Null<Array<T>>
+}
 
 enum FieldKind {
 	FVar( t : T, val : Null<Expr> );
@@ -93,12 +99,14 @@ enum FieldKind {
 
 typedef Function = {
 	var args : Array<{ name : String, t : T }>;
-	var varArgs : Null<String>;
+	var varArgs : Null<{ name : String, t : T }>;
 	var ret : T;
+	var throws:Array<T>;
 	var expr : Null<Expr>;
+	var pos : Pos;
 }
 
-typedef Metadata = Array<{ name : String, args : Array<{ name : String, val : Expr }> }>;
+typedef Metadata = Array<{ name : String, args : Array<{ name : String, val : Expr }>, pos : Pos }>;
 
 typedef ClassField = {
 	var meta : Metadata;
@@ -106,46 +114,48 @@ typedef ClassField = {
 	var kwds : Array<String>;
 	var name : String;
 	var kind : FieldKind;
+	var pos : Pos;
+}
+
+typedef EnumField = {
+	var name : String;
+	var args : Null<Array<Expr>>;
+	var meta : Metadata;
+	var pos : Pos;
 }
 
 typedef EnumDef = {
 	var meta : Metadata;
 	var kwds : Array<String>;
+	var types : Array<GenericDecl>;
 	var name : String;
-	var fields : Array<String>;
-	var funcs : Array<ClassField>;
+	var implement : Array<T>;
+	
+	var constrs : Array<EnumField>;
+	var fields : Array<ClassField>;
+	var staticInit : Expr;
+	var instInit : Expr;
+	var pos : Pos;
 }
 
 typedef ClassDef = {
 	var meta : Metadata;
 	var kwds : Array<String>;
 	var isInterface : Bool;
+	var types : Array<GenericDecl>;
 	var name : String;
-	var fields : Array<ClassField>;
 	var implement : Array<T>;
 	var extend : Null<T>;
-	var inits : Array<Expr>;
-	var staticInits : Array<Expr>;
-}
-
-typedef FunctionDef = {
-	var meta : Metadata;
-	var kwds : Array<String>;
-	var name : String;
-	var f : Function;
-}
-
-typedef NamespaceDef = {
-	var meta : Metadata;
-	var kwds : Array<String>;
-	var name : String;
-	var value : String;
+	
+	var fields : Array<ClassField>;
+	var staticInit : Expr;
+	var instInit : Expr;
+	var pos : Pos;
 }
 
 enum Definition {
 	CDef( c : ClassDef );
-	FDef( f : FunctionDef );
-	NDef( n : NamespaceDef );
+	EDef( e : EnumDef );
 }
 
 typedef Program = {
