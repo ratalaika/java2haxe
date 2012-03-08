@@ -12,7 +12,14 @@ class Main
 {
 	static function main()
 	{
-		trace(new Parser().parseString(x, "file.java"));
+		var p = new Parser().parseString(x, "file.java");
+		switch(p.defs[0])
+		{
+			case CDef(c):
+				for (f in c.fields)
+					trace(f);
+			default:
+		}
 	}
 	
 	static var x = '

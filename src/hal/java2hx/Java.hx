@@ -46,7 +46,7 @@ enum ExprExpr
 	JVars( vars : Array<{ name : String, t : T, val : Null<Expr> }> );
 	JParent( e : Expr );
 	JBlock( e : Array<Expr> );
-	JSynchronized ( e : Array<Expr> );
+	JSynchronized ( lock : Expr, e : Array<Expr> );
 	JField( e : Expr, f : String );
 	JBinop( op : String, e1 : Expr, e2 : Expr );
 	JUnop( op : String, prefix : Bool, e : Expr );

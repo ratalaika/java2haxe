@@ -1061,6 +1061,20 @@ class Parser {
 				}
 			}
 			mk(JSwitch(e, cl, def), 2);
+		case "class":
+			var cl = parseClass([], [], min);
+			mk(JInnerDecl(CDef(cl)), min);
+		case "enum":
+			var e = parseEnum([], [], min);
+			mk(JInnerDecl(EDef(e)), min);
+		case "synchronized":
+			ensure(TPOpen);
+			var lock = parseExpr();
+			ensure(TPClose);
+			ensure(TBrOpen);
+			var block = parseExprList(TBrClose, true);
+			
+			mk(JSynchronized(lock, block), min);
 		case "do":
 			var e = parseExpr();
 			ensure(TId("while"));
