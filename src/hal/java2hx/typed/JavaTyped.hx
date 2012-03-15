@@ -77,9 +77,11 @@ enum TExprExpr
 	TBlock( e : Array<TExpr> );
 	TSynchronized ( lock : TExpr, block : Array<TExpr> );
 	TField( e : TExpr, f : String );
+	TStaticField( def : Definition, field : String );
 	TBinop( op : String, e1 : TExpr, e2 : TExpr );
 	TUnop( op : String, prefix : Bool, e : TExpr );
 	TCall( e : TExpr, field:ClassField, tparams:TParams, params : Array<TExpr> );
+	TStaticCall( def : Definition, field : ClassField, tparams : TParams, params : Array<TExpr> );
 	TTypeExpr( def : Definition );
 	TIf( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
 	TTernary( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
