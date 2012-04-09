@@ -212,11 +212,20 @@ class Parser {
 			}
 			unexpected(tk);
 		}
+		var name = switch(defs[0])
+		{
+			case EDef(e): e.name;
+			case CDef(c): c.name;
+		};
+		
+		//defs will always have one element only
+		if (defs.length != 1) throw "unexpected";
 		return {
 			header : header,
 			pack : pack,
 			imports : imports,
-			defs : defs,
+			def : defs[0],
+			name : name,
 		};
 	}
 	
@@ -330,7 +339,7 @@ class Parser {
 	function parseEnum(kwds, meta, min) : EnumDef
 	{
 		var ename = id();
-		var types = parseTypeParameters();
+		//var types = parseTypeParameters();
 		var fields = new Array();
 		var impl = [], staticInit = null, instInit = null;
 		if( opt(TId("implements")) ) {
@@ -385,7 +394,7 @@ class Parser {
 		return {
 			meta : meta,
 			kwds : kwds,
-			types : types,
+			//types : types,
 			name : ename,
 			implement : impl,
 			
@@ -706,6 +715,110 @@ class Parser {
 		}
 	}
 	
+	function parseCastOrParen() : Expr
+	{
+		#if debug trace("parseCast()"); #end
+		
+		var min = pos;
+		var toRollback = [];
+		
+		function rollback(parseParen:Bool=false)
+		{
+			#if debug trace("\t Rolling back: " + toRollback); #end
+			var len = toRollback.length;
+			for (i in 0...len)
+			{
+				add(toRollback[len - i - 1]);
+			}
+			
+			if (parseParen)
+			{
+				var e = parseExpr();
+				ensure(TPClose);
+				
+				#if debug trace("\t Is parenthesis "); #end
+				return mk(JParent(e), min);
+			} else {
+				return null;
+			}
+		}
+		
+		if (opt(TId("final")))
+		{
+			toRollback.push(TId("final"));
+		} else {
+			var inArrDecl = false;
+			var genDecl = 0;
+			var hadId = false;
+			var idMin = 0;
+			
+			while (true)
+			{
+				idMin = pos;
+				var tk = token();
+				toRollback.push(tk);
+				switch(tk)
+				{
+					case TId(s):
+						if (inArrDecl) return rollback(true);
+						if (hadId && genDecl == 0)
+						{
+							return rollback(true);
+						} else {
+							hadId = true;
+						}
+					case TDot:
+						if (!hadId) return rollback(true);
+						hadId = false;
+					case TPClose:
+						if (hadId && genDecl == 0 && !inArrDecl)
+						{
+							break; //is cast
+						} else {
+							return rollback(true);
+						}
+					case TOp(op):
+						switch(op)
+						{
+						case "<": genDecl++;
+						case ">": if (genDecl-- < 0) return rollback(true);
+						default: return rollback(true);
+						}
+					
+					case TBkOpen:
+						if (inArrDecl) return rollback(true);
+						inArrDecl = true;
+					case TBkClose:
+						if (!inArrDecl) return rollback(true);
+						inArrDecl = false;
+					default:
+						return rollback(true);
+				}
+			}
+		}
+		
+		rollback();
+		#if debug trace("\t Is cast "); #end
+		//is cast
+		var t = parseType();
+		ensure(TPClose);
+		
+		var exp = parseExpr();
+		
+		function addExpr(to:Expr)
+		{
+			switch(to.expr)
+			{
+			case JBinop(op, e1, e2):
+				return mk(JBinop(op,addExpr(e1),e2), to.pos.min, to.pos.max);
+			default:
+				return mk(JCast(t, to), min, to.pos.max);
+			}
+		}
+		
+		return addExpr(exp);
+	}
+	
 	function parseVarDecl() : Null<Expr>
 	{
 		#if debug trace("parseVarDecl()"); #end
@@ -748,6 +861,10 @@ class Parser {
 						} else {
 							hadId = true;
 						}
+					case TDot:
+						if (!hadId) return rollback();
+						
+						hadId = false;
 					case TOp(op):
 						switch(op)
 						{
@@ -770,6 +887,7 @@ class Parser {
 		
 		
 		rollback();
+		#if debug trace("\t Is var declaration "); #end
 		var vars = [];
 		
 		while (true)
@@ -831,9 +949,10 @@ class Parser {
 		case TConst(c):
 			return parseExprNext(mk(JConst(c), min));
 		case TPOpen:
-			var e = parseExpr();
-			ensure(TPClose);
-			return parseExprNext(mk(JParent(e), min));
+			var e = parseCastOrParen();
+			//var e = parseExpr();
+			//ensure(TPClose);
+			return parseExprNext(e);
 		case TBrOpen:
 			#if debug trace("parseExpr: "); #end
 			var a = new Array();
@@ -865,6 +984,11 @@ class Parser {
 
 	function makeBinop( op, e1, e:Expr, min, max=0 ) {
 		return switch( e.expr ) {
+		case JTernary(cond, e1, e2):
+			if (op == "==" || op == "!=" || op.charCodeAt(op.length-1) != '='.code)
+				mk(JTernary( mk(JBinop(op, e1, cond), min, max), e1, e2 ), min, e.pos.max);
+			else
+				mk(JBinop(op,e1,e), min, max);
 		case JBinop(op2, e2, e3):
 			var p1 = opPriority.get(op);
 			var p2 = opPriority.get(op2);
@@ -1140,7 +1264,7 @@ class Parser {
 			return mk(JTernary(e1, e2, e3), min);
 		case TId(s):
 			switch( s ) {
-			case "instanceof": return makeBinop("instanceof", e1, parseExpr(), min);
+			case "instanceof": return mk(JInstanceOf(e1, parseType()), min);
 			default:
 				add(tk);
 				return e1;
@@ -1334,12 +1458,16 @@ class Parser {
 						do {
 							buf.addChar(char);
 							char = nextChar();
-						} while( (char >= '0'.code && char <= '9'.code) || (char >= 'A'.code && char <= 'F'.code) || (char >= 'a'.code && char <= 'f'.code) );
-						this.char = char;
-						return TConst(CInt(buf.toString()));
+						} while ( (char >= '0'.code && char <= '9'.code) || (char >= 'A'.code && char <= 'F'.code) || (char >= 'a'.code && char <= 'f'.code) );
+						if (char == 'L'.code)
+						{
+							this.char = 0;
+							return TConst(CLong(buf.toString()));
+						} else {
+							this.char = char;
+							return TConst(CInt(buf.toString()));
+						}
 					}
-					this.char = char;
-					return TConst(CInt(buf.toString()));
 				case 'e'.code:
 					if( buf.toString() == '.' ) {
 						this.char = char;
@@ -1354,6 +1482,12 @@ class Parser {
 					while( char >= '0'.code && char <= '9'.code ) {
 						buf.addChar(char);
 						char = nextChar();
+					}
+					
+					if ( char == 'f'.code )
+					{
+						this.char = 0;
+						return TConst(CSingle(buf.toString()));
 					}
 					this.char = char;
 					return TConst(CFloat(buf.toString()));
@@ -1372,6 +1506,8 @@ class Parser {
 					var str = buf.toString();
 					if( str.length == 1 ) return TDot;
 					return TConst(isSingle ? CSingle(str) : CFloat(str));
+				case 'L'.code:
+					return TConst(CLong(buf.toString()));
 				default:
 					this.char = char;
 					return TConst(CInt(buf.toString()));
@@ -1487,7 +1623,9 @@ class Parser {
 	function constString( c ) {
 		return switch(c) {
 		case CInt(v): v;
-		case CFloat(f), CSingle(f): f;
+		case CSingle(f): f + "f";
+		case CLong(v): v + "L";
+		case CFloat(f): f;
 		case CString(s): s; // TODO : escape + quote
 		}
 	}

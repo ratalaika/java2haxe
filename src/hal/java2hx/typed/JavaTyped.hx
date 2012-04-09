@@ -7,31 +7,31 @@ import haxe.Int32;
  * @author waneck
  */
 
+typedef TType =
+{
+	final : Bool,
+	meta : Metadata,
+	type : TTypeT
+}
+ 
 typedef Var = {
 	var id : Int;
 	var name : String;
-	var t : T;
+	var t : TType;
 }
 
 typedef TExpr = {
 	expr : TExprExpr,
-	t : T,
+	t : TType,
 	pos : Pos
 }
 
-typedef T =
-{
-	final : Bool,
-	meta : Metadata,
-	type : TypeT
-}
-
-typedef TParams = Array<TypeT>;
+typedef TParams = Array<TTypeT>;
 
 typedef TypeParameter = {
 	var id : Int;
 	var name : String;
-	var extend : Array<T>;
+	var extend : Array<TType>;
 }
 
 enum BasicType
@@ -49,13 +49,13 @@ enum BasicType
 	TVoid;
 }
 
-enum TypeT
+enum TTypeT
 {
 	TBasic( basic : BasicType );
-	TEnum( en : EnumDef, params : TParams );
-	TInst( cl : ClassDef, params : TParams );
+	TEnum( en : TEnumDef, params : TParams );
+	TInst( cl : TClassDef, params : TParams );
 	TTypeParam( param : TypeParameter );
-	TWildcard( ?ext : T, ?sup : T );
+	TWildcard( ?ext : TType, ?sup : TType );
 }
 
 enum TConst
@@ -63,9 +63,97 @@ enum TConst
 	TSuper;
 	TThis;
 	TString( s : String );
+	TLong( v : String );
 	TInt( i : Int32 );
 	TFloat( v : String );
 	TSingle( v : String );
+}
+
+typedef Function = {
+	var args : Array<{ name : String, t : TType }>;
+	var varArgs : Null<{ name : String, t : TType }>;
+	var ret : TType;
+	var throws:Array<TType>;
+	var expr : Null<TExpr>;
+	var pos : Pos;
+}
+
+enum TFieldKind
+{
+	TVar( val : Null<TExpr> );
+	TFunction( func : Function );
+}
+
+typedef TClassField =
+{
+	var isMember : Bool;
+	var isPrivate : Bool;
+	var name : String;
+	var meta : Metadata;
+	var comments : Array<Expr>;
+	var kwds : Array<String>;
+	var kind : FieldKind;
+	var pos : Pos;
+	var parent : TClassDef;
+	var docs : String;
+	var isOverride : Bool;
+	
+	//for fast overload resolution
+	var argsCount : Int; //-1 if variable or var-args
+	var args : Null<Array<TType>>; //null if variable
+}
+
+typedef TClassDef = {
+	var pack : Array<String>;
+	var meta : Metadata;
+	var kwds : Array<String>;
+	var isInterface : Bool;
+	var types : Array<TypeParameter>;
+	var name : String;
+	var implement : Array<TType>;
+	var extend : Null<TType>;
+	
+	var orderedStatics : Array<TClassField>;
+	var orderedFields : Array<TClassField>;
+	var statics : Hash<Array<TClassField>>;
+	var fields : Hash<Array<TClassField>>;
+	
+	var ctors : Array<TClassField>;
+	
+	var staticInit : TExpr;
+	var instInit : TExpr;
+	
+	var pos : Pos;
+}
+
+typedef TEnumField = {
+	var name : String;
+	var args : Null<Array<TExpr>>;
+	var meta : Metadata;
+	var docs : String;
+	var pos : Pos;
+}
+
+//we will offer by now limited support for enums
+typedef TEnumDef = {
+	var pack : Array<String>;
+	var meta : Metadata;
+	var kwds : Array<String>;
+	var name : String;
+	var implement : Array<TType>;
+	
+	var orderedConstrs : Array<TEnumField>;
+	var constrs : Hash<TEnumField>;
+	
+	var orderedFields : Array<TClassField>;
+	var staticInit : TExpr;
+	var instInit : TExpr;
+	var pos : Pos;
+}
+
+enum TDefinition {
+	TCDef( c : TClassDef );
+	TEDef( e : TEnumDef );
 }
 
 enum TExprExpr 
@@ -73,16 +161,20 @@ enum TExprExpr
 	TConst( c : TConst );
 	TLocal( v : Var );
 	TVars( vars : Array<{ v : Var, val : Null<TExpr> }> );
+	TCast( t : TType, expr : TExpr );
 	TParent( e : TExpr );
 	TBlock( e : Array<TExpr> );
 	TSynchronized ( lock : TExpr, block : Array<TExpr> );
-	TField( e : TExpr, f : String );
-	TStaticField( def : Definition, field : String );
+	TClassField( e : TExpr, f : TClassField );
+	TStaticField( f : TClassField );
+	TEnumField( f : TEnumField );
+	TField( e : TExpr, f : String ); //for not found fields (maybe unavailable source code)
 	TBinop( op : String, e1 : TExpr, e2 : TExpr );
 	TUnop( op : String, prefix : Bool, e : TExpr );
-	TCall( e : TExpr, field:ClassField, tparams:TParams, params : Array<TExpr> );
-	TStaticCall( def : Definition, field : ClassField, tparams : TParams, params : Array<TExpr> );
-	TTypeExpr( def : Definition );
+	TMemberCall( e : TExpr, field : TClassField, tparams : TParams, params : Array<TExpr> );
+	TStaticCall( field : TClassField, tparams : TParams, params : Array<TExpr> );
+	TCall( e : TExpr, field : String, params : Array<TExpr> ); //for not found fields
+	TTypeExpr( def : Definition ); //equivalent of MyClass / MyClass.class 
 	TIf( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
 	TTernary( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
 	TWhile( cond : TExpr, e : TExpr, doWhile : Bool, ?label:String );
@@ -92,13 +184,14 @@ enum TExprExpr
 	TContinue( ?label : String );
 	TReturn( ?e : TExpr );
 	TArray( e : TExpr, index : TExpr );
-	TArrayDecl( t : T, lens : Null<Array<TExpr>>, e : Null<Array<TExpr>> );
-	TNewAnon( def : { fields : Array<ClassField>, staticInit : Null<TExpr>, instInit : Null<TExpr> } );
-	TNew( t : T, params : Array<TExpr> );
+	TArrayDecl( t : TType, lens : Null<Array<TExpr>>, e : Null<Array<TExpr>> );
+	TNewAnon( def : { base : TClassDef, fields : Array<TClassField>, staticInit : Null<TExpr>, instInit : Null<TExpr>, captured : Array<Var> } );
+	TNew( t : TType, params : Array<TExpr> );
 	TThrow( e : TExpr );
-	TTry( e : TExpr, catches : Array<{ name : String, t : T, e: TExpr } >, finally : TExpr );
+	TTry( e : TExpr, catches : Array<{ v : Var, e: TExpr } >, finally : TExpr );
 	TSwitch( e : TExpr, cases : Array<{ val : TExpr, el : Array<TExpr> }>, def : Null<Array<TExpr>> );
 	TComment( s : String, isBlock: Bool );
 	TAssert( e : TExpr, ?ifFalse : TExpr );
-	TInnerDecl( def : Definition );
+	TInnerDecl( def : TDefinition );
+	TInstanceOf( e : Expr, t : TType );
 }

@@ -13,7 +13,7 @@ class Main
 	static function main()
 	{
 		var p = new Parser().parseString(x, "file.java");
-		switch(p.defs[0])
+		switch(p.def)
 		{
 			case CDef(c):
 				for (f in c.fields)
@@ -233,6 +233,7 @@ public class Island {
 
     // dynamic array
     if (m_velocities == null || m_bodyCapacity > m_velocities.length) {
+	  final int xaa = (int) m_contacts;
       final Velocity[] old = m_velocities == null ? new Velocity[0] : m_velocities;
       m_velocities = new Velocity[m_bodyCapacity];
       System.arraycopy(old, 0, m_velocities, 0, old.length);
@@ -260,12 +261,12 @@ public class Island {
   }
 
   private final ContactSolver contactSolver = new ContactSolver();
-  private final Vec2 translation = new Vec2();
+  private final org.jbox2d.common.Vec2 translation = new org.jbox2d.common.Vec2();
   private final Timer timer = new Timer();
   private final SolverData solverData = new SolverData();
   private final ContactSolverDef solverDef = new ContactSolverDef();
 
-  public void solve(Profile profile, TimeStep step, Vec2 gravity, boolean allowSleep) {
+  public void solve(Profile profile, TimeStep step, org.jbox2d.common.Vec2 gravity, boolean allowSleep) {
 
     // System.out.println("Solving Island");
     float h = step.dt;
@@ -273,7 +274,7 @@ public class Island {
     // Integrate velocities and apply damping. Initialize the body state.
     for (int i = 0; i < m_bodyCount; ++i) {
       final Body b = m_bodies[i];
-      final Vec2 c = b.m_sweep.c;
+      final org.jbox2d.common.Vec2 c = b.m_sweep.c;
       float a = b.m_sweep.a;
       final Vec2 v = b.m_linearVelocity;
       float w = b.m_angularVelocity;

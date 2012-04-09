@@ -31,6 +31,7 @@ typedef Pos = {
 }
 
 enum Const {
+	CLong( v : String );
 	CInt( v : String );
 	CFloat( f : String );
 	CSingle( f : String );
@@ -44,6 +45,7 @@ enum ExprExpr
 	JConst( c : Const );
 	JIdent( v : String );
 	JVars( vars : Array<{ name : String, t : T, val : Null<Expr> }> );
+	JCast( to : T, expr : Expr );
 	JParent( e : Expr );
 	JBlock( e : Array<Expr> );
 	JSynchronized ( lock : Expr, e : Array<Expr> );
@@ -69,6 +71,7 @@ enum ExprExpr
 	JComment( s : String, isBlock: Bool );
 	JAssert( e : Expr, ?ifFalse : Expr );
 	JInnerDecl( def : Definition );
+	JInstanceOf( e : Expr, t : T );
 }
 
 typedef T = {
@@ -130,7 +133,6 @@ typedef EnumField = {
 typedef EnumDef = {
 	var meta : Metadata;
 	var kwds : Array<String>;
-	var types : Array<GenericDecl>;
 	var name : String;
 	var implement : Array<T>;
 	
@@ -165,5 +167,6 @@ typedef Program = {
 	var header : Array<Expr>; // will hold only comments
 	var pack : Array<String>;
 	var imports : Array<Array<String>>;
-	var defs : Array<Definition>;
+	var name : String;
+	var def : Definition;
 }
