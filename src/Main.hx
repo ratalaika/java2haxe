@@ -267,7 +267,7 @@ public class Island {
   private final SolverData solverData = new SolverData();
   private final ContactSolverDef solverDef = new ContactSolverDef();
 
-  public void solve(Profile profile, TimeStep step, org.jbox2d.common.Vec2 gravity, boolean allowSleep) {
+  public <T> void solve(Profile profile, TimeStep step, org.jbox2d.common.Vec2 gravity, boolean allowSleep) {
 
     // System.out.println("Solving Island");
     float h = step.dt;

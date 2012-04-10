@@ -44,13 +44,13 @@ enum BasicType
 {
 	TByte;
 	TShort;
-	TInt;
-	TLong;
 	TChar;
+	TInt;
 	
 	TSingle;
 	TFloat;
 	
+	TLong;
 	TBool;
 	TVoid;
 }
@@ -58,8 +58,8 @@ enum BasicType
 enum TTypeT
 {
 	TBasic( basic : BasicType );
-	TEnum( en : TEnumDef, params : TParams );
 	TInst( cl : TClassDef, params : TParams );
+	TEnum( en : TEnumDef );
 	TArray( t : TTypeT );
 	TTypeParam( param : TypeParameter );
 	TUnknown( t : TPath ); // when a type is not found

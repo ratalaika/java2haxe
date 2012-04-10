@@ -120,6 +120,7 @@ typedef ClassField = {
 	var kwds : Array<String>;
 	var name : String;
 	var kind : FieldKind;
+	var types : Array<GenericDecl>;
 	var pos : Pos;
 }
 

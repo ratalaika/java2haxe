@@ -111,7 +111,83 @@ class Typer
 	
 	private function unifies(from:TType, to:TType):Bool
 	{
+		//if (from.final && !to.final) return false;
 		return false;
+	}
+	
+	private function unifiesT(from:TTypeT, to:TTypeT, ?types:Array<TypeParameter>, ?inferredT:Array<TTypeT>):Bool
+	{
+		var ifrom = Type.enumIndex(from);
+		var ito = Type.enumIndex(to);
+		
+		if (ifrom != ito)
+		{
+			//it could be:
+			//a box operation, an unbox operation
+			//a type parameter 
+			
+			if (ifrom == 0 && (ito == 1 || ito == 5)) //box operation
+			{
+				var pathTo = getPath(to);
+				return pathTo == "java.lang.Object" || pathTo == "java.lang." + getBasicName(getBasic(from));
+			}
+		}
+		
+		switch(to)
+		{
+		case TBasic(t):
+			switch(t)
+			{
+			case TLong, TInt, TChar, TShort, TByte:
+			
+			default:
+			}
+		default:
+		}
+		
+		return false;
+	}
+	
+	//gets path of either a TUnknown, a TInst or a TEnum
+	private function getPath(t:TTypeT):String
+	{
+		return switch(t)
+		{
+		case TInst(cl, _): spath(cl.pack, cl.name);
+		case TEnum(e): spath(e.pack, e.name);
+		case TUnknown(t):
+			switch(t)
+			{
+			case TPath(p, _): p.join(".");
+			default: null;
+			}
+		default: null;
+		}
+	}
+	
+	private function getBasic(t:TTypeT):BasicType
+	{
+		return switch(t)
+		{
+		case TBasic(b): b;
+		default: throw "assert";
+		}
+	}
+	
+	private function getBasicName(b:BasicType):String
+	{
+		return switch(b)
+		{
+		case TByte: "Byte";
+		case TShort: "Short";
+		case TChar: "Character";
+		case TInt: "Integer";
+		case TSingle: "Float";
+		case TFloat: "Double";
+		case TLong: "Long";
+		case TBool: "Boolean";
+		case TVoid: "Void";
+		}
 	}
 	
 	///////////////////////////////
@@ -545,7 +621,7 @@ class Typer
 			case TCDef(c):
 				TInst(c, t_tps(params));
 			case TEDef(e):
-				TEnum(e, t_tps(params));
+				TEnum(e);
 			case TNotFound:
 				onTypeNotFound(path);
 				TUnknown(t);

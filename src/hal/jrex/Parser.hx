@@ -462,6 +462,7 @@ class Parser {
 			var min = pos;
 			var kwds = [];
 			var comments = [];
+			var lastTypes = null;
 			while( true )  {
 				var t = token();
 				switch( t ) {
@@ -534,11 +535,15 @@ class Parser {
 								end();
 							}
 							
+							var lt = lastTypes;
+							lastTypes = null;
+							
 							fields.push( {
 								comments: [],
 								kwds : kwds,
 								meta : meta,
 								name : name,
+								types : lt,
 								kind : FFun({
 									args : args.args,
 									varArgs : args.varArgs,
@@ -554,11 +559,15 @@ class Parser {
 							var val = null;
 							if (opt(TOp("=")))
 								val = parseExpr();
+							
+							var lt = lastTypes;
+							lastTypes = null;
 							fields.push({
 								comments : [],
 								kwds: kwds,
 								meta : meta,
 								name : name,
+								types : lt,
 								kind : FVar(t, val),
 								pos : mkPos(min)
 							});
@@ -568,8 +577,16 @@ class Parser {
 						break;
 					}
 				case TComment(s,b):
-					fields.push({name:null, meta:null, kwds:[], kind:FComment, comments:[mk( JComment(s,b), min ) ], pos : mkPos(min)});
+					fields.push({types: null, name:null, meta:null, kwds:[], kind:FComment, comments:[mk( JComment(s,b), min ) ], pos : mkPos(min)});
 					break;
+				case TOp(op):
+					if (op == "<") // start of generics
+					{
+						add(t);
+						lastTypes = parseTypeParameters();
+					} else {
+						unexpected(t);
+					}
 				default:
 					unexpected(t);
 					break;
