@@ -92,6 +92,23 @@ class Typer
 		return false;
 	}
 	
+	/**
+	 * Typer 1st pass
+	 */
+	
+	private function fromFullPath( path : String ) : Null<TDefinition>
+	{
+		var typed = ctx.typed.get(path);
+		if (typed != null)
+			return typed;
+		
+		var parsed = lookup(path);
+		if (parsed != null)
+			return processFirstPass(parsed);
+		
+		return null;
+	}
+	
 	private function processFirstPass(def:Program):TDefinition
 	{
 		var p = spath(def.pack, def.name);
@@ -234,7 +251,7 @@ class Typer
 		return ret.toString();
 	}
 	
-	private function processClassField1( par : TDefinition, cf : ClassField, baseDef : TBaseDef ) : Void
+	private function processClassField1( par : TDefinition, cf : ClassField, baseDef : TBaseDef ) : Null<String>
 	{
 		var isPrivate = false;
 		var isOverride = false;
@@ -256,6 +273,33 @@ class Typer
 				isOverride = true;
 		}
 		
+		var argsCount = -1;
+		var args = null;
+		
+		switch(cf.kind)
+		{
+		case FComment:
+			return getComments(cf.comments);
+		case FFun(f):
+			
+			args = [t(f.ret)];
+			for (arg in f.args)
+			{
+				args.push(t(arg.t));
+			}
+			
+			if (f.varArgs != null) 
+			{
+				argsCount = -1;
+				args.push(t(f.varArgs.t));
+			} else {
+				argsCount = f.args.length;
+			}
+			
+			
+		case FVar(_,_):
+		}
+		
 		var ret = {
 			isMember : false,
 			isPrivate : isPrivate,
@@ -270,8 +314,8 @@ class Typer
 			isOverride : isOverride,
 			
 			//for fast overload resolution
-			argsCount : -1, //-1 if variable or var-args
-			args : null, //null if variable
+			argsCount : argsCount, //-1 if variable or var-args
+			args : args, //null if variable
 		};
 		
 		untyped ret._rel = cf;
@@ -301,6 +345,8 @@ class Typer
 			
 			s.push(ret);
 		}
+		
+		return null;
 	}
 	
 	private function processEnumConstructor1( e : EnumField, def : TEnumDef ) : Void

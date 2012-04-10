@@ -398,6 +398,7 @@ class Parser {
 			name : ename,
 			implement : impl,
 			
+			childDefs : fields.childDefs,
 			constrs : constrs,
 			fields : fields.fields,
 			staticInit : fields.staticInit,
@@ -442,6 +443,7 @@ class Parser {
 			meta : meta,
 			name : cname,
 			types : types,
+			childDefs : fields.childDefs,
 			fields : fields.fields,
 			implement : impl,
 			extend : extend,
@@ -451,9 +453,9 @@ class Parser {
 		};
 	}
 	
-	function parseFields() : { fields : Array<ClassField>, staticInit:Null<Expr>, instInit:Null<Expr> }
+	function parseFields() : { fields : Array<ClassField>, staticInit:Null<Expr>, instInit:Null<Expr>, childDefs:Array<Definition> }
 	{
-		var fields = [], staticInit = null, instInit = null;
+		var fields = [], staticInit = null, instInit = null, childDefs = [];
 		while( true ) {
 			if( opt(TBrClose) ) break;
 			var meta = parseMetadata();
@@ -481,6 +483,12 @@ class Parser {
 				case TId(id):
 					switch( id ) {
 					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp": kwds.push(id);
+					case "class":
+						var c = CDef(parseClass(kwds, meta, min));
+						childDefs.push(c);
+					case "enum":
+						var e = EDef(parseEnum(kwds, meta, min));
+						childDefs.push(e);
 					default:
 						add(t);
 						//first parse type
@@ -569,7 +577,7 @@ class Parser {
 			}
 		}
 		
-		return { fields : fields, staticInit : staticInit, instInit : instInit };
+		return { fields : fields, staticInit : staticInit, instInit : instInit , childDefs : childDefs };
 	}
 	
 	function mk(e:ExprExpr, min:Int, ?max:Int = 0)

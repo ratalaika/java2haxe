@@ -135,6 +135,7 @@ typedef EnumDef = {
 	var kwds : Array<String>;
 	var name : String;
 	var implement : Array<T>;
+	var childDefs : Array<Definition>;
 	
 	var constrs : Array<EnumField>;
 	var fields : Array<ClassField>;
@@ -151,6 +152,7 @@ typedef ClassDef = {
 	var name : String;
 	var implement : Array<T>;
 	var extend : Null<T>;
+	var childDefs : Array<Definition>;
 	
 	var fields : Array<ClassField>;
 	var staticInit : Expr;
