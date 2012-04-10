@@ -97,9 +97,9 @@ class Typer
 		return false;
 	}
 	
-	/**
-	 * Typer 1st pass
-	 */
+	///////////////////////////////
+	// Typer 1st pass
+	///////////////////////////////
 	
 	private function fromFullPath( path : String ) : Null<TDefinition>
 	{
@@ -116,6 +116,10 @@ class Typer
 	
 	private function processFirstPass(prog:Program):TDefinition
 	{
+		if (topLevel != null) throw "Typer must be empty";
+		
+		this.imports = prog.imports;
+		
 		var p = spath(prog.pack, prog.name);
 		
 		var t = ctx.typed.get(p);
@@ -419,6 +423,10 @@ class Typer
 		def.orderedConstrs.push(ret);
 	}
 	
+	///////////////////////////////
+	// HELPERS
+	///////////////////////////////
+	
 	private function t( t : T ) : TType
 	{
 		return null;
@@ -438,5 +446,6 @@ class Typer
 	{
 		return p.file + " : " + p.min + "-" + p.max;
 	}
+	
 	
 }
