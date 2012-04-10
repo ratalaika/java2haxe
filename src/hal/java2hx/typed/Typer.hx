@@ -14,7 +14,7 @@ class TyperContext
 	public static var ids:Int = 0;
 	
 	public var typed:Hash<TDefinition>;
-	public var defs:Array<TDefinition>;
+	public var typersLeft:Array<Typer>;
 	
 	public function new()
 	{
@@ -37,6 +37,8 @@ class Typer
 	private var imported:Hash<TDefinition>;
 	private var imports:Array< Array<String> >;
 	private var contextVars:Array<Hash<Var>>;
+	private var topLevel:TDefinition;
+	private var children:Array<TDefinition>;
 	
 	public function new(ctx)
 	{
@@ -44,6 +46,9 @@ class Typer
 		this.imported = new Hash();
 		this.contextVars = [];
 		this.imports = [];
+		this.children = [];
+		
+		ctx.typersLeft.push(this);
 	}
 	
 	public dynamic function lookup(path:String):Null<Program>
@@ -104,29 +109,56 @@ class Typer
 		
 		var parsed = lookup(path);
 		if (parsed != null)
-			return processFirstPass(parsed);
+			return new Typer(ctx).processFirstPass(parsed);
 		
 		return null;
 	}
 	
-	private function processFirstPass(def:Program):TDefinition
+	private function processFirstPass(prog:Program):TDefinition
 	{
-		var p = spath(def.pack, def.name);
+		var p = spath(prog.pack, prog.name);
 		
 		var t = ctx.typed.get(p);
 		if (t != null)
 			return t;
 		
-		switch(def.def)
+		switch(prog.def)
 		{
 		case EDef(e):
-			return TEDef(processEnum(def, e));
+			return TEDef(processEnum(prog, e));
 		case CDef(c):
-			return TCDef(processClass(def, c));
+			return TCDef(processClass(prog, c));
 		}
 	}
 	
-	private function processClass(def:Program, c:ClassDef):TClassDef
+	private function processChild(prog:Program, parentName:String, def:Definition):TDefinition
+	{
+		var newPack = prog.pack.copy();
+		var name = switch(def)
+			{
+			case EDef(e): e.name;
+			case CDef(c): c.name;
+			};
+		
+		newPack.push(parentName);
+		var newProg = {
+			header : [],
+			pack : newPack,
+			imports : prog.imports,
+			name : name,
+			def : def,
+		};
+		
+		switch(def)
+		{
+		case EDef(e):
+			return TEDef(processEnum(newProg, e));
+		case CDef(c):
+			return TCDef(processClass(newProg, c));
+		}
+	}
+	
+	private function processClass(prog:Program, c:ClassDef):TClassDef
 	{
 		var isInterface = false;
 		for (kw in c.kwds)
@@ -141,7 +173,7 @@ class Typer
 		var implement = [], types = [];
 		//to avoid infinite recursion
 		var ret = {
-			pack : def.pack,
+			pack : prog.pack,
 			meta : c.meta,
 			kwds : c.kwds,
 			name : c.name,
@@ -165,7 +197,18 @@ class Typer
 		
 		var par = TCDef(ret);
 		//avoiding infinite recursion
-		ctx.typed.set( spath(def.pack, c.name), par );
+		ctx.typed.set( spath(prog.pack, c.name), par );
+		
+		this.imported.set(c.name, par);
+		if (this.topLevel == null)
+			topLevel = par;
+		else
+			children.push(par);
+		
+		for (def in c.childDefs)
+		{
+			processChild(prog, c.name, def);
+		}
 		
 		for (t in c.types)
 		{
@@ -187,12 +230,12 @@ class Typer
 		return ret;
 	}
 	
-	private function processEnum(def:Program, en:EnumDef):TEnumDef
+	private function processEnum(prog:Program, en:EnumDef):TEnumDef
 	{
 		var implement = [];
 		//to avoid infinite recursion
 		var ret = {
-			pack : def.pack,
+			pack : prog.pack,
 			meta : en.meta,
 			kwds : en.kwds,
 			name : en.name,
@@ -214,7 +257,18 @@ class Typer
 		untyped ret._rel = en;
 		
 		var par = TEDef(ret);
-		ctx.typed.set( spath(def.pack, en.name), par );
+		ctx.typed.set( spath(prog.pack, en.name), par );
+		
+		this.imported.set(en.name, par);
+		if (this.topLevel == null)
+			topLevel = par;
+		else
+			children.push(par);
+		
+		for (def in en.childDefs)
+		{
+			processChild(prog, en.name, def);
+		}
 		
 		for (i in en.implement)
 		{
