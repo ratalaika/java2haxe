@@ -26,12 +26,18 @@ typedef TExpr = {
 	pos : Pos
 }
 
-typedef TParams = Array<TTypeT>;
+typedef TParams = Null<Array<TParam>>;
+
+enum TParam
+{
+	T( t : TTypeT );
+	TWildcard( ?ext : TTypeT, ?sup : TTypeT );
+}
 
 typedef TypeParameter = {
 	var id : Int;
 	var name : String;
-	var extend : Array<TType>;
+	var extend : Null<Array<TType>>;
 }
 
 enum BasicType
@@ -54,8 +60,9 @@ enum TTypeT
 	TBasic( basic : BasicType );
 	TEnum( en : TEnumDef, params : TParams );
 	TInst( cl : TClassDef, params : TParams );
+	TArray( t : TTypeT );
 	TTypeParam( param : TypeParameter );
-	TWildcard( ?ext : TType, ?sup : TType );
+	TUnknown( t : TPath ); // when a type is not found
 }
 
 enum TConst
@@ -69,7 +76,7 @@ enum TConst
 	TSingle( v : String );
 }
 
-typedef Function = {
+typedef TFunction = {
 	var args : Array<{ name : String, t : TType }>;
 	var varArgs : Null<{ name : String, t : TType }>;
 	var ret : TType;
@@ -81,7 +88,7 @@ typedef Function = {
 enum TFieldKind
 {
 	TVar( val : Null<TExpr> );
-	TFunction( func : Function );
+	TFunction( func : TFunction );
 }
 
 typedef TClassField =
@@ -150,6 +157,7 @@ typedef TEnumDef = {
 enum TDefinition {
 	TCDef( c : TClassDef );
 	TEDef( e : TEnumDef );
+	TNotFound;
 }
 
 enum TExprExpr 

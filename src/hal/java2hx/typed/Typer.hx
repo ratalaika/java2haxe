@@ -29,6 +29,15 @@ class TyperContext
 			t : t
 		};
 	}
+	
+	public function allocTypeParam(name:String, extend:Array<TType>)
+	{
+		return {
+			id : ids++,
+			name : name,
+			extend : extend
+		};
+	}
 }
 
 class Typer 
@@ -39,6 +48,7 @@ class Typer
 	private var contextVars:Array<Hash<Var>>;
 	private var topLevel:TDefinition;
 	private var children:Array<TDefinition>;
+	private var tparams:Hash<TypeParameter>;
 	
 	public function new(ctx)
 	{
@@ -47,8 +57,15 @@ class Typer
 		this.contextVars = [];
 		this.imports = [];
 		this.children = [];
+		this.tparams = new Hash();
 		
 		ctx.typersLeft.push(this);
+	}
+	
+	public dynamic function onTypeNotFound(typePath:Array<String>):Void
+	{
+		//throw errors if wanted.
+		//by default, type will be typed as Unknown and typing will continue normally
 	}
 	
 	public dynamic function lookup(path:String):Null<Program>
@@ -427,14 +444,106 @@ class Typer
 	// HELPERS
 	///////////////////////////////
 	
-	private function t( t : T ) : TType
+	private function lookupPath( path : Array<String> ) : TDefinition
 	{
-		return null;
+		if (path.length == 1) //special 
+		{
+			
+		}
+	}
+	
+	private function t( tp : T ) : TType
+	{
+		var tt = typet(tp.t);
+		
+		return {
+			final : tp.final,
+			meta : null,
+			type : tt
+		};
+	}
+	
+	private function typet( t : TPath ) : TTypeT
+	{
+		return switch(tp.t)
+		{
+		case TArray(of):
+			TTypeT.TArray( t(of) );
+		case TPath(path, params):
+			if (path.length == 1)
+			{
+				switch(path[0])
+				{
+				case "byte":
+					return TBasic(TByte);
+				case "short":
+					return TBasic(TShort);
+				case "int":
+					return TBasic(TInt);
+				case "long":
+					return TBasic(TLong);
+				case "char":
+					return TBasic(TChar);
+				case "float":
+					return TBasic(TSingle);
+				case "double":
+					return TBasic(TFloat);
+				case "boolean":
+					return TBasic(TBool);
+				case "void":
+					return TBasic(TVoid);
+				default:
+					//see if it's type parameter
+					var tp = tparams.get(path[0]);
+					if (tp != null)
+						return TTypeParam(tp);
+				}
+			}
+			
+			var def = lookupPath(path);
+			switch(def)
+			{
+			case TCDef(c):
+				TInst(c, t_tps(params));
+			case TEDef(e):
+				TEnum(e, t_tps(params));
+			case TNotFound:
+				onTypeNotFound(path);
+				TUnknown(t);
+			}
+		};
+	}
+	
+	private function t_tps( tps : Null<Array<TArg>> ) : JavaTyped.TParams
+	{
+		if (tps == null || tps.length == 0) return null;
+		var ret = [];
+		for (t in tps)
+			ret.push(t_tp(t));
+		return ret;
+	}
+	
+	private function t_tp( tp : TArg ) : TParam
+	{
+		return switch(tp)
+		{
+		case AType(t):
+			this.t(t);
+		case AWildcard:
+			TWildcard();
+		case AWildcardExtends(t):
+			TWildcard(this.t(t));
+		case AWildcardSuper(t):
+			TWildcard(null, this.t(t));
+		}
 	}
 	
 	private function tp( g : GenericDecl ) : TypeParameter
 	{
-		return null;
+		var ext = [];
+		if (g.extend != null) for (e in g.extend)
+			ext.push( this.t(e) );
+		return ctx.allocTypeParam(g.name, ret);
 	}
 	
 	private function spath(pack:Array<String>, name:String)
