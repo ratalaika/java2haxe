@@ -90,11 +90,11 @@ typedef TClassField =
 	var isPrivate : Bool;
 	var name : String;
 	var meta : Metadata;
-	var comments : Array<Expr>;
+	var comments : String;
 	var kwds : Array<String>;
-	var kind : FieldKind;
+	var kind : TFieldKind;
 	var pos : Pos;
-	var parent : TClassDef;
+	var def : TDefinition;
 	var docs : String;
 	var isOverride : Bool;
 	
@@ -103,27 +103,31 @@ typedef TClassField =
 	var args : Null<Array<TType>>; //null if variable
 }
 
-typedef TClassDef = {
+typedef TBaseDef = {
 	var pack : Array<String>;
 	var meta : Metadata;
 	var kwds : Array<String>;
-	var isInterface : Bool;
-	var types : Array<TypeParameter>;
 	var name : String;
 	var implement : Array<TType>;
-	var extend : Null<TType>;
+	
+	var ctors : Array<TClassField>;
 	
 	var orderedStatics : Array<TClassField>;
 	var orderedFields : Array<TClassField>;
 	var statics : Hash<Array<TClassField>>;
 	var fields : Hash<Array<TClassField>>;
 	
-	var ctors : Array<TClassField>;
-	
-	var staticInit : TExpr;
-	var instInit : TExpr;
+	var staticInit : Null<TExpr>;
+	var instInit : Null<TExpr>;
 	
 	var pos : Pos;
+}
+
+typedef TClassDef = {
+	> TBaseDef,
+	var isInterface : Bool;
+	var types : Array<TypeParameter>;
+	var extend : Null<TType>;
 }
 
 typedef TEnumField = {
@@ -136,19 +140,11 @@ typedef TEnumField = {
 
 //we will offer by now limited support for enums
 typedef TEnumDef = {
-	var pack : Array<String>;
-	var meta : Metadata;
-	var kwds : Array<String>;
-	var name : String;
-	var implement : Array<TType>;
+	> TBaseDef,
 	
 	var orderedConstrs : Array<TEnumField>;
 	var constrs : Hash<TEnumField>;
 	
-	var orderedFields : Array<TClassField>;
-	var staticInit : TExpr;
-	var instInit : TExpr;
-	var pos : Pos;
 }
 
 enum TDefinition {

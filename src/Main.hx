@@ -1,6 +1,7 @@
 package ;
 
 import hal.java2hx.Parser;
+import hal.java2hx.typed.Typer;
 import neko.Lib;
 
 /**

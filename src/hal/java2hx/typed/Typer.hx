@@ -21,7 +21,7 @@ class TyperContext
 		this.typed = new Hash();
 	}
 	
-	public function allocVar(name:String, t:T):Var
+	public function allocVar(name:String, t:TType):Var
 	{
 		return {
 			id : ids++,
@@ -48,7 +48,7 @@ class Typer
 	
 	public dynamic function lookup(path:String):Null<Program>
 	{
-		throw "not implemented";
+		return throw "not implemented";
 	}
 	
 	public dynamic function error(obj:Dynamic, pos:Pos):Dynamic
@@ -73,6 +73,8 @@ class Typer
 			if (ret != null)
 				return ret;
 		}
+		
+		return null;
 	}
 	
 	private function pushBlock()
@@ -101,13 +103,76 @@ class Typer
 		switch(def.def)
 		{
 		case EDef(e):
-			
+			return TEDef(processEnum(def, e));
+		case CDef(c):
+			return TCDef(processClass(def, c));
 		}
+	}
+	
+	private function processClass(def:Program, c:ClassDef):TClassDef
+	{
+		var isInterface = false;
+		for (kw in c.kwds)
+		{
+			switch(kw)
+			{
+			case "interface":
+				isInterface = true;
+			}
+		}
+		
+		var implement = [], types = [];
+		//to avoid infinite recursion
+		var ret = {
+			pack : def.pack,
+			meta : c.meta,
+			kwds : c.kwds,
+			name : c.name,
+			implement : implement,
+			
+			ctors : [],
+			
+			orderedStatics : [],
+			orderedFields : [],
+			statics : new Hash(),
+			fields : new Hash(),
+			staticInit : null,
+			instInit : null,
+			pos : c.pos,
+			
+			isInterface : isInterface,
+			types : types,
+			extend : null
+		};
+		untyped ret._rel = c;
+		
+		var par = TCDef(ret);
+		//avoiding infinite recursion
+		ctx.typed.set( spath(def.pack, c.name), par );
+		
+		for (t in c.types)
+		{
+			types.push( tp( t ) );
+		}
+		
+		ret.extend = t( c.extend );
+		
+		for (i in c.implement)
+		{
+			implement.push( t(i) );
+		}
+		
+		for (c in c.fields)
+		{
+			processClassField1(par, c, cast ret);
+		}
+		
+		return ret;
 	}
 	
 	private function processEnum(def:Program, en:EnumDef):TEnumDef
 	{
-		var implement = [], orderedFields = [], orderedConstrs = [];
+		var implement = [];
 		//to avoid infinite recursion
 		var ret = {
 			pack : def.pack,
@@ -116,15 +181,23 @@ class Typer
 			name : en.name,
 			implement : implement,
 			
-			orderedConstrs : orderedConstrs,
-			constrs : new Hash(),
+			ctors : [],
 			
-			orderedFields : orderedFields,
+			orderedStatics : [],
+			orderedFields : [],
+			statics : new Hash(),
+			fields : new Hash(),
 			staticInit : null,
 			instInit : null,
-			pos : en.pos
+			pos : en.pos,
+			
+			orderedConstrs : [],
+			constrs : new Hash(),
 		};
-		ctx.typed.set( spath(def.pack, en.name), ret );
+		untyped ret._rel = en;
+		
+		var par = TEDef(ret);
+		ctx.typed.set( spath(def.pack, en.name), par );
 		
 		for (i in en.implement)
 		{
@@ -133,14 +206,104 @@ class Typer
 		
 		for (c in en.constrs)
 		{
-			orderedConstrs.push( processEnumConstructor1(c) );
+			processEnumConstructor1(c, ret);
 		}
 		
+		for (c in en.fields)
+		{
+			processClassField1(par, c, cast ret);
+		}
 		
-		
+		return ret;
 	}
 	
-	private function processEnumConstructor1( e : EnumField ) : TEnumDef
+	private function getComments( exprs:Array<Expr> ) : String
+	{
+		var ret = new StringBuf();
+		for (e in exprs)
+		{
+			switch(e.expr)
+			{
+			case JComment(s, _):
+				ret.add(s);
+				ret.add("\n");
+			default: throw "assert";
+			}
+		}
+		
+		return ret.toString();
+	}
+	
+	private function processClassField1( par : TDefinition, cf : ClassField, baseDef : TBaseDef ) : Void
+	{
+		var isPrivate = false;
+		var isOverride = false;
+		var isStatic = false;
+		for (kw in cf.kwds)
+		{
+			switch(kw)
+			{
+			case "private", "protected": 
+				isPrivate = true;
+			case "static":
+				isStatic = true;
+			}
+		}
+		
+		for (m in cf.meta)
+		{
+			if (m.name == "Override")
+				isOverride = true;
+		}
+		
+		var ret = {
+			isMember : false,
+			isPrivate : isPrivate,
+			name : cf.name,
+			meta : cf.meta,
+			comments : getComments( cf.comments ),
+			kwds : cf.kwds,
+			kind : null,
+			pos : cf.pos,
+			def : par,
+			docs : getComments(cf.comments),
+			isOverride : isOverride,
+			
+			//for fast overload resolution
+			argsCount : -1, //-1 if variable or var-args
+			args : null, //null if variable
+		};
+		
+		untyped ret._rel = cf;
+		
+		if (isStatic)
+		{
+			baseDef.orderedStatics.push(ret);
+			var s = baseDef.statics.get(cf.name);
+			if (s == null)
+			{
+				s = [];
+				baseDef.statics.set(cf.name, s);
+			}
+			
+			s.push(ret);
+		} else if (cf.name == baseDef.name) { //constructor
+			ret.name = "new";
+			baseDef.ctors.push(ret);
+		} else {
+			baseDef.orderedFields.push(ret);
+			var s = baseDef.fields.get(cf.name);
+			if (s == null)
+			{
+				s = [];
+				baseDef.fields.set(cf.name, s);
+			}
+			
+			s.push(ret);
+		}
+	}
+	
+	private function processEnumConstructor1( e : EnumField, def : TEnumDef ) : Void
 	{
 		var ret = {
 			name : e.name,
@@ -151,12 +314,19 @@ class Typer
 		};
 		
 		untyped ret._rel = e;
-		return ret;
+		
+		def.constrs.set(e.name, ret);
+		def.orderedConstrs.push(ret);
 	}
 	
 	private function t( t : T ) : TType
 	{
-		
+		return null;
+	}
+	
+	private function tp( g : GenericDecl ) : TypeParameter
+	{
+		return null;
 	}
 	
 	private function spath(pack:Array<String>, name:String)
