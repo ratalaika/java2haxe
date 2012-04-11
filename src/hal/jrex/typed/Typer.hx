@@ -36,6 +36,7 @@ class TyperContext
 		tbyte = TBasic(TByte); tshort = TBasic(TShort); tchar = TBasic(TChar); tsingle = TBasic(TSingle); tfloat = TBasic(TFloat);
 		tlong = TBasic(TLong); tbool = TBasic(TBool); tvoid = TBasic(TVoid);
 		
+		///here
 		tstring = null; //FIXME
 	}
 	
@@ -74,6 +75,7 @@ class TyperContext
 	
 	public function tclass(t:TTypeT):TTypeT
 	{
+		///here
 		return null; //TODO
 	}
 }
@@ -157,10 +159,10 @@ class Typer
 		contextVars.pop();
 	}
 	
-	private function unifies(from:TType, to:TType):Bool
+	private function unifies(from:TType, to:TType, ?types:Array<TypeParameter>, ?inferredT:Array<TTypeT>):Bool
 	{
 		//if (from.final && !to.final) return false;
-		return false;
+		return unifiesT(from.type, to.type, types, inferredT);
 	}
 	
 	private function paramIndex(types:Array<TypeParameter>, t:TypeParameter):Int
@@ -273,11 +275,6 @@ class Typer
 				trace (from + " -> " + to);
 				return false;
 			}
-		}
-		
-		if (ifrom == tlazy)
-		{
-			
 		}
 		
 		switch(to)
@@ -887,6 +884,75 @@ class Typer
 		}
 	}
 	
+	private function follow(t:TTypeT):TTypeT
+	{
+		return switch(t)
+		{
+		case TLazy(ref):
+			if (ref.ref == null) return t;
+			follow(ref.ref);
+		default: t;
+		}
+	}
+	
+	private function solveOverload(params:Array<TExpr>, fields:Array<TClassField>):Null<{ cf:ClassField, types:Null<Array<TTypeT>> }>
+	{
+		var len = params.length;
+		
+		for (f in fields)
+		{
+			if (f.argsCount == -1 || f.argsCount == len)
+			{
+				var compatible = true;
+				var ts = (f.types == null) ? null : [];
+				for (i in 0...len)
+				{
+					var p = params[i].type;
+					var op = f.args[i];
+					if (op == null)
+						if (f.argsCount == -1) 
+							op = f.args[f.args.length - 1];
+						else
+							throw "assert";
+					
+					if (!unifies(p, op, f.types, ts))
+					{
+						compatible = false;
+						break;
+					}
+				}
+				
+				if (compatible)
+					return { cf:f, types:ts };
+			}
+		}
+		
+		return null;
+	}
+	
+	private function mkMaybeStaticField(e1:TExpr, field:String, pos:Pos, ?callParams:Array<TExpr>):TExpr
+	{
+		return switch(e1.expr)
+		{
+		case TParent(p):
+			mkMaybeStaticField(p, field);
+		case TTypeExpr(def):
+			switch(def)
+			{
+			case TCDef(c):
+				var s = c.statics.get(field);
+				if (s == null) throw UnboundField(def, field, true, pos);
+				if (callParams != null)
+				{
+					var cf = solveOverload(callParams, s);
+					if (cf == null) throw NoOverloadFound(def, field, true, callParams.map(function(p) return p.type.type), pos);
+					
+					///here
+				}
+			}
+		}
+	}
+	
 	private function ttype(expr:Expr):TExpr
 	{
 		if (expr == null) return null;
@@ -944,7 +1010,17 @@ class Typer
 				var t = lookupPath(arr);
 				if (t != null)
 				{
-					
+					return mk2(TTypeExpr(t), ctx.tclass(defToT(t)), expr.pos);
+				}
+			}
+			
+			var et = ttype(e);
+			switch(et.type.type)
+			{
+			case TInst(c, p):
+				if (c.name == "Class" && c.pack[0] == "java" && c.pack[1] == "lang")
+				{
+					///here
 				}
 			}
 			
