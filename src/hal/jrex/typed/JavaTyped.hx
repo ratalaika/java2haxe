@@ -17,12 +17,12 @@ typedef TType =
 typedef Var = {
 	var id : Int;
 	var name : String;
-	var t : TType;
+	var type : TType;
 }
 
 typedef TExpr = {
 	expr : TExprExpr,
-	t : TType,
+	type : TType,
 	pos : Pos
 }
 
@@ -37,7 +37,7 @@ enum TParam
 typedef TypeParameter = {
 	var id : Int;
 	var name : String;
-	var extend : Null<Array<TType>>;
+	var extend : Null<Array<TTypeT>>;
 }
 
 enum BasicType
@@ -58,22 +58,24 @@ enum BasicType
 enum TTypeT
 {
 	TBasic( basic : BasicType );
-	TInst( cl : TClassDef, params : TParams );
 	TEnum( en : TEnumDef );
+	TInst( cl : TClassDef, params : TParams );
 	TArray( t : TTypeT );
 	TTypeParam( param : TypeParameter );
 	TUnknown( t : TPath ); // when a type is not found
+	TLazy( ref : { ref : TTypeT } );
 }
 
 enum TConst
 {
-	TSuper;
-	TThis;
-	TString( s : String );
-	TLong( v : String );
-	TInt( i : Int32 );
-	TFloat( v : String );
-	TSingle( v : String );
+	TCNull;
+	TCSuper;
+	TCThis;
+	TCString( s : String );
+	TCLong( v : String );
+	TCInt( i : String );
+	TCFloat( v : String );
+	TCSingle( v : String );
 }
 
 typedef TFunction = {
@@ -104,6 +106,7 @@ typedef TClassField =
 	var def : TDefinition;
 	var docs : String;
 	var isOverride : Bool;
+	var types : Null<Array<TypeParameter>>;
 	
 	//for fast overload resolution
 	var argsCount : Int; //-1 if variable or var-args
@@ -134,7 +137,7 @@ typedef TClassDef = {
 	> TBaseDef,
 	var isInterface : Bool;
 	var types : Array<TypeParameter>;
-	var extend : Null<TType>;
+	var extend : Null<TTypeT>;
 }
 
 typedef TEnumField = {
@@ -178,7 +181,7 @@ enum TExprExpr
 	TMemberCall( e : TExpr, field : TClassField, tparams : TParams, params : Array<TExpr> );
 	TStaticCall( field : TClassField, tparams : TParams, params : Array<TExpr> );
 	TCall( e : TExpr, field : String, params : Array<TExpr> ); //for not found fields
-	TTypeExpr( def : Definition ); //equivalent of MyClass / MyClass.class 
+	TTypeExpr( def : TDefinition ); //equivalent of MyClass / MyClass.class 
 	TIf( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
 	TTernary( cond : TExpr, e1 : TExpr, ?e2 : TExpr );
 	TWhile( cond : TExpr, e : TExpr, doWhile : Bool, ?label:String );
