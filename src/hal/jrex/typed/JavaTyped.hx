@@ -102,6 +102,7 @@ typedef TClassField =
 	var comments : String;
 	var kwds : Array<String>;
 	var kind : TFieldKind;
+	var type : Null<TType>;
 	var pos : Pos;
 	var def : TDefinition;
 	var docs : String;
@@ -179,7 +180,7 @@ enum TExprExpr
 	TBinop( op : String, e1 : TExpr, e2 : TExpr );
 	TUnop( op : String, prefix : Bool, e : TExpr );
 	TMemberCall( e : TExpr, field : TClassField, tparams : TParams, params : Array<TExpr> );
-	TStaticCall( field : TClassField, tparams : TParams, params : Array<TExpr> );
+	TStaticCall( field : TClassField, tparams : Null<Array<TTypeT>>, params : Array<TExpr> );
 	TCall( e : TExpr, field : String, params : Array<TExpr> ); //for not found fields
 	TTypeExpr( def : TDefinition ); //equivalent of MyClass / MyClass.class 
 	TIf( cond : TExpr, e1 : TExpr, ?e2 : TExpr );

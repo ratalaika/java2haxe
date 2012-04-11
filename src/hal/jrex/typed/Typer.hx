@@ -29,6 +29,7 @@ class TyperContext
 	public var tvoid:TTypeT;
 	
 	public var tstring:TTypeT;
+	public var tobject:TTypeT;
 	
 	public function new()
 	{
@@ -38,6 +39,7 @@ class TyperContext
 		
 		///here
 		tstring = null; //FIXME
+		tobject = null; //FIXME
 	}
 	
 	public function allocVar(name:String, t:TType):Var
@@ -355,6 +357,50 @@ class Typer
 		return true;
 	}
 	
+	private function applyParams2(types:Array<TypeParameter>, params:JavaTyped.TParams, t:TTypeT):TTypeT
+	{
+		if (types == null || types.length == 0)
+			return t;
+		
+		var p = params.map(function(p)
+			return switch(p)
+			{
+			case T(t):t;
+			case TWildcard(ext, sup):
+				if (ext != null)
+					ext;
+				else
+					ctx.tobject;
+			}
+		).array();
+		
+		return applyParams(types, p, t);
+	}
+	
+	private function applyParams(types:Array<TypeParameter>, params:Array<TTypeT>, t:TTypeT):TTypeT
+	{
+		if (types == null || types.length == 0)
+			return t;
+		
+		return switch(follow(t))
+		{
+		case TTypeParam(p):
+			var idx = types.indexOf(p);
+			if (idx == -1)
+				t;
+			else
+				params[idx];
+		case TInst(c, p):
+			TInst(c, p.map(function(p) return switch(p) {
+				case T(t): T(applyParams(types,params,t));
+				case TWildcard(_, _):p;
+			}).array());
+		case TArray(t):
+			TTypeT.TArray(applyParams(types, params, t));
+		default: t;
+		};
+	}
+	
 	//gets path of either a TUnknown, a TInst or a TEnum
 	private function getPath(t:TTypeT):String
 	{
@@ -629,6 +675,7 @@ class Typer
 		var isPrivate = false;
 		var isOverride = false;
 		var isStatic = false;
+		var type = null;
 		for (kw in cf.kwds)
 		{
 			switch(kw)
@@ -681,7 +728,8 @@ class Typer
 				argsCount = f.args.length;
 			}
 			
-		case FVar(_,_):
+		case FVar(t, _):
+			type = this.t(t);
 		}
 		
 		popTypes(types);
@@ -694,6 +742,7 @@ class Typer
 			comments : getComments( cf.comments ),
 			kwds : cf.kwds,
 			kind : null,
+			type : type,
 			pos : cf.pos,
 			def : par,
 			docs : getComments(cf.comments),
@@ -895,7 +944,7 @@ class Typer
 		}
 	}
 	
-	private function solveOverload(params:Array<TExpr>, fields:Array<TClassField>):Null<{ cf:ClassField, types:Null<Array<TTypeT>> }>
+	private function solveOverload(params:Array<TExpr>, fields:Array<TClassField>):Null<{ cf:TClassField, types:Null<Array<TTypeT>> }>
 	{
 		var len = params.length;
 		
@@ -935,7 +984,7 @@ class Typer
 		return switch(e1.expr)
 		{
 		case TParent(p):
-			mkMaybeStaticField(p, field);
+			mkMaybeStaticField(p, field, pos, callParams);
 		case TTypeExpr(def):
 			switch(def)
 			{
@@ -947,9 +996,25 @@ class Typer
 					var cf = solveOverload(callParams, s);
 					if (cf == null) throw NoOverloadFound(def, field, true, callParams.map(function(p) return p.type.type), pos);
 					
-					///here
+					var ret = applyParams(cf.cf.types, cf.types, cf.cf.args[0].type);
+					mk2(TStaticCall(cf.cf, cf.types, callParams), ret, pos);
+				} else {
+					if (s.length > 1 || s[0].argsCount != -1) throw AccessFieldWithoutCalling(def, field, true, pos);
+					mk(TStaticField(s[0]), s[0].type, pos);
 				}
+			case TEDef(e):
+				///here
+				null;
+			case TNotFound:
+				if (callParams != null)
+				{
+					
+				}
+				null;
+				//mk2(
 			}
+		default: //call non-static field handler
+			null;
 		}
 	}
 	
@@ -1022,6 +1087,7 @@ class Typer
 				{
 					///here
 				}
+			default:
 			}
 			
 			null;
