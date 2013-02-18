@@ -82,12 +82,14 @@ class Parser {
 	var tokens : GenericStack<Token>;
 	var no_comments : Bool;
 	var lastComments : Array<Token>;
+	var watchingComments : Bool;
 	
 	var pos:Int;
 
 	public function new() {
 		lastComments = [];
 		line = 1;
+		watchingComments = true;
 		identChars = "$ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 		var p = [
 			["%", "*", "/"],
@@ -1008,6 +1010,8 @@ class Parser {
 	function parseFullExpr() {
 		#if debug trace("parseFullExpr()"); #end
 		var min = pos;
+		var lst = watchingComments;
+		watchingComments = false;
 		
 		var tk = token();
 		var isFinal = false;
@@ -1029,6 +1033,7 @@ class Parser {
 		if (e == null)
 			e = parseExpr();
 		
+		watchingComments = lst;
 		return e;
 	}
 
@@ -1686,7 +1691,8 @@ class Parser {
 							}
 							if (no_comments)
 							{
-								lastComments.push(TComment(contents, true));
+								if (watchingComments)
+									lastComments.push(TComment(contents, true));
 								return token();
 							}
 							
