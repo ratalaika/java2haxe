@@ -63,7 +63,7 @@ enum ExprExpr
 	JReturn( ?e : Expr );
 	JArray( e : Expr, index : Expr );
 	JArrayDecl( t : T, lens : Null<Array<Expr>>, e : Null<Array<Expr>> );
-	JNewAnon( def : { fields : Array<ClassField>, staticInit : Null<Expr>, instInit : Null<Expr> } );
+	JNewAnon( t : T, params:Array<Expr>, def : { fields : Array<ClassField>, staticInit : Null<Expr>, instInit : Null<Expr> } );
 	JNew( t : T, params : Array<Expr> );
 	JThrow( e : Expr );
 	JTry( e : Expr, catches : Array<{ name : String, t : T, e: Expr } >, finally : Expr );

@@ -49,13 +49,13 @@ class HaxeExtern
 	
 	private function convertClass(c:ClassDef, defStack:Array<String>)
 	{
-		for (c in c.comments)
+		if (c.comments != null) for (c in c.comments)
 			expr(c);
 		
 		if (defStack.length > 0)
-			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "')");
+			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "') ");
 		if (c.kwds.has("private") || c.kwds.has("protected"))
-			w('private');
+			w('private ');
 		if (c.isInterface)
 			w('extern interface ');
 		else
@@ -191,7 +191,7 @@ class HaxeExtern
 			case TPath(p, params):
 				p.join(".") + "<" + params.map(targ).join(", ") + ">";
 			case TArray(tp):
-				"java.NativeArray<" + tpath(t) + ">";
+				"java.NativeArray<" + tpath(tp) + ">";
 		}
 	}
 	
@@ -219,10 +219,10 @@ class HaxeExtern
 	
 	private function convertEnum(e:EnumDef, defStack:Array<String>)
 	{
-		for (c in e.comments)
+		if (e.comments != null) for (c in e.comments)
 			expr(c);
 		if (defStack.length > 0)
-			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "')");
+			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "') ");
 		
 		if (e.kwds.has("private") || e.kwds.has("protected"))
 			w('private');
@@ -234,7 +234,7 @@ class HaxeExtern
 			for (c in ctor.comments)
 				expr(c);
 			w(ctor.name);
-			w('\n');
+			w(';\n');
 		}
 		w('}\n');
 		

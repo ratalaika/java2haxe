@@ -393,6 +393,7 @@ class Parser {
 				});
 				
 				comments = [];
+			case TComma:
 			case TComment(s, b):
 				comments.push(mk(JComment(s,b), min));
 			default:
@@ -500,8 +501,11 @@ class Parser {
 				case TId(id):
 					switch( id ) {
 					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "final": kwds.push(id);
-					case "class":
-						var c = CDef(parseClass(kwds, meta, min, lastComment));
+					case "class", "interface":
+						var c1 = parseClass(kwds, meta, min, lastComment);
+						var c = CDef(c1);
+						if (id == "interface")
+							c1.isInterface = true;
 						lastComment = null;
 						childDefs.push(c);
 					case "enum":
@@ -512,7 +516,7 @@ class Parser {
 						add(t);
 						//first parse type
 						var t = parseType();
-						trace(t);
+						#if debug trace(t); #end
 						
 						var name = null;
 						if (peek() == TPOpen) //it's the constructor
@@ -576,8 +580,17 @@ class Parser {
 							lastComment = null;
 						} else {
 							var val = null;
+							while (opt(TBkOpen))
+							{
+								var tk = token();
+								if (tk != TBkClose)
+									unexpected(tk);
+								t.t = TArray(t.t);
+							}
+								
 							if (opt(TOp("=")))
 								val = parseExpr();
+							
 							
 							var lt = lastTypes;
 							lastTypes = null;
@@ -629,7 +642,7 @@ class Parser {
 	}
 	
 	function parseType(?parseArray=true) {
-		#if debug trace("parseType()"); #end
+		#if debug trace("parseType(" + parseArray + ")"); #end
 		var t = id();
 		
 		var isFinal = false;
@@ -637,12 +650,6 @@ class Parser {
 		{
 			isFinal = true;
 			t = id();
-			//switch(t)
-			//{
-			//case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "class", "enum", "final", "interface":
-				//add(t);
-				//add("final");
-			//}
 		}
 		
 		var a = [t];
@@ -663,6 +670,12 @@ class Parser {
 		}
 		
 		var params = [];
+		if (opt(TOp("<<")))
+		{
+			add(TOp("<"));
+			add(TOp("<"));
+		}
+		
 		if (opt(TOp("<")))
 		{
 			while (true)
@@ -681,17 +694,17 @@ class Parser {
 					}
 					
 					continue;
-				case TOp(op):
-					if (op == ">") break;
+				case TOp(">"):break;
+				case TOp(">>"): add(TOp(">")); break;
+				case TOp(">>>"): add(TOp(">"));add(TOp(">")); break;
 				case TId(_):
 					add(tk);
 					params.push(AType(parseType()));
 				case TComma:
 					continue;
 				default:
+					unexpected(tk);
 				}
-				
-				unexpected(tk);
 			}
 		}
 		
@@ -726,6 +739,13 @@ class Parser {
 				{
 					ensure(TDot);
 					ensure(TDot);
+					
+					while (opt(TBkOpen))
+					{
+						ensure(TBkClose);
+						type.t = TArray(type.t);
+					}
+					
 					varArgs = { name : id(), t : type };
 					ensure(TPClose);
 					
@@ -733,6 +753,11 @@ class Parser {
 				}
 				var name = id();
 				
+				while (opt(TBkOpen))
+				{
+					ensure(TBkClose);
+					type.t = TArray(type.t);
+				}
 				opt(TComma);
 				args.push( { name : name, t : type } );
 			}
@@ -928,10 +953,13 @@ class Parser {
 						switch(op)
 						{
 						case "<": genDecl++;
+						case ">>": if ( (genDecl -= 2) < 0) return rollback();
+						case ">>>": if ( (genDecl -= 3) < 0) return rollback();
 						case ">": if (genDecl-- < 0) return rollback();
 						default: return rollback();
 						}
-					
+					case TComma, TQuestion if (genDecl > 0):
+						
 					case TBkOpen:
 						if (inArrDecl) return rollback();
 						inArrDecl = true;
@@ -1004,6 +1032,8 @@ class Parser {
 			var e = parseStructure(id, namedExpr, min);
 			if( e == null )
 				e = mk(JIdent(id), min);
+			if ( peek() == TSemicolon || peek() == TComma )
+				return e;
 			return parseExprNext(e);
 		case TConst(c):
 			return parseExprNext(mk(JConst(c), min));
@@ -1149,11 +1179,6 @@ class Parser {
 		case "return":
 			mk(JReturn(if( peek() == TSemicolon ) null else parseExpr()), min);
 		case "new":
-			if (opt(TBrOpen)) //inner class
-			{
-				var fields = parseFields();
-				mk(JNewAnon(fields), min);
-			} else { 
 				var t = parseType(false);
 				
 				if (opt(TBkOpen)) //check if it is array declaration
@@ -1194,15 +1219,15 @@ class Parser {
 				} else {
 					ensure(TPOpen);
 					
-					var params = [];
-					while (!opt(TPClose))
-					{
-						params.push(parseExpr());
-					}
+					var params = parseExprList(TPClose);
 					
-					mk(JNew(t, params), min);
+					if (opt(TBrOpen)) //anonymous class
+					{
+						mk(JNewAnon(t, params, parseFields()), min);
+					} else {
+						mk(JNew(t, params), min);
+					}
 				}
-			}
 		case "throw":
 			mk(JThrow( parseExpr() ), min);
 		case "try":
@@ -1255,7 +1280,13 @@ class Parser {
 			var lock = parseExpr();
 			ensure(TPClose);
 			ensure(TBrOpen);
-			var block = parseExprList(TBrClose, true);
+			
+			var block = new Array();
+			while( !opt(TBrClose) ) {
+				var e = parseFullExpr();
+				end();
+				block.push(e);
+			}
 			
 			mk(JSynchronized(lock, block), min);
 		case "do":
@@ -1345,10 +1376,11 @@ class Parser {
 			while( true ) {
 				args.push(full ? parseFullExpr() : parseExpr());
 				var tk = token();
+				if (tk == etk) break;
+				
 				switch( tk ) {
 				case TComma:
 				default:
-					if( tk == etk ) break;
 					unexpected(tk);
 				}
 			}
