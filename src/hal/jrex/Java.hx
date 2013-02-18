@@ -100,7 +100,6 @@ typedef GenericDecl = {
 enum FieldKind {
 	FVar( t : T, val : Null<Expr> );
 	FFun( f : Function );
-	FComment;
 }
 
 typedef Function = {
@@ -125,6 +124,7 @@ typedef ClassField = {
 }
 
 typedef EnumField = {
+	var comments : Array<Expr>;
 	var name : String;
 	var args : Null<Array<Expr>>;
 	var meta : Metadata;
@@ -132,6 +132,7 @@ typedef EnumField = {
 }
 
 typedef EnumDef = {
+	var comments : Null<Array<Expr>>;
 	var meta : Metadata;
 	var kwds : Array<String>;
 	var name : String;
@@ -146,13 +147,14 @@ typedef EnumDef = {
 }
 
 typedef ClassDef = {
+	var comments : Null<Array<Expr>>;
 	var meta : Metadata;
 	var kwds : Array<String>;
 	var isInterface : Bool;
 	var types : Array<GenericDecl>;
 	var name : String;
 	var implement : Array<T>;
-	var extend : Null<T>;
+	var extend : Array<T>;
 	var childDefs : Array<Definition>;
 	
 	var fields : Array<ClassField>;
@@ -167,7 +169,6 @@ enum Definition {
 }
 
 typedef Program = {
-	var header : Array<Expr>; // will hold only comments
 	var pack : Array<String>;
 	var imports : Array<Array<String>>;
 	var name : String;

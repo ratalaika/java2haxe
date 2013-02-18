@@ -24,6 +24,10 @@
  */
 package hal.jrex;
 import hal.jrex.Java;
+import haxe.ds.GenericStack;
+import haxe.ds.GenericStack;
+import haxe.ds.StringMap;
+import haxe.PosInfos;
 using Lambda;
 
 enum Error {
@@ -65,7 +69,7 @@ class Parser {
 	// config / variables
 	public var line : Int;
 	public var identChars : String;
-	public var opPriority : Hash<Int>;
+	public var opPriority : StringMap<Int>;
 	public var unopsPrefix : Array<String>;
 	public var unopsSuffix : Array<String>;
 
@@ -75,7 +79,7 @@ class Parser {
 	var char : Int;
 	var ops : Array<Bool>;
 	var idents : Array<Bool>;
-	var tokens : haxe.FastList<Token>;
+	var tokens : GenericStack<Token>;
 	var no_comments : Bool;
 	
 	var pos:Int;
@@ -97,7 +101,7 @@ class Parser {
 			["?:"],
 			["=", "+=", "-=", "*=", "%=", "/=", "<<=", ">>=", ">>>=", "&=", "^=", "|=", "&&=", "||="]
 		];
-		opPriority = new Hash();
+		opPriority = new StringMap();
 		for( i in 0...p.length )
 			for( op in p[i] )
 				opPriority.set(op, i);
@@ -110,18 +114,18 @@ class Parser {
 	}
 
 	public function parseString( s : String, asFile:String ) {
-		line = 1;
 		return parse( new haxe.io.StringInput(s), asFile );
 	}
 
 	public function parse( s : haxe.io.Input, asFile:String ) {
 		this.file = asFile;
+		line = 1;
 		char = 0;
 		pos = 0;
 		input = s;
 		ops = new Array();
 		idents = new Array();
-		tokens = new haxe.FastList<Token>();
+		tokens = new GenericStack<Token>();
 		for( op in opPriority.keys() )
 			for( i in 0...op.length )
 				ops[op.charCodeAt(i)] = true;
@@ -201,7 +205,8 @@ class Parser {
 					continue;
 				case "public", "class", "enum", "protected", "private", "abstract", "static", "final", "strictfp", "interface":
 					add(tk);
-					defs.push(parseDefinition(tpos));
+					defs.push(parseDefinition(tpos, header));
+					header = [];
 					continue;
 				default:
 				}
@@ -221,7 +226,7 @@ class Parser {
 		//defs will always have one element only
 		if (defs.length != 1) throw "unexpected";
 		return {
-			header : header,
+			//header : header,
 			pack : pack,
 			imports : imports,
 			def : defs[0],
@@ -256,8 +261,8 @@ class Parser {
 		return a;
 	}
 	
-	function parseMetadata() {
-		#if debug trace("parseMetadata()"); #end
+	function parseMetadata(?pinfo:PosInfos) {
+		#if debug haxe.Log.trace("parseMetadata()", pinfo); #end
 		var ml = [];
 		while( opt(TAt) ) {
 			var min = pos;
@@ -283,7 +288,7 @@ class Parser {
 		return ml;
 	}
 	
-	function parseDefinition(min:Int) {
+	function parseDefinition(min:Int, comments) {
 		#if debug trace("parseDefinition()"); #end
 		var kwds = [];
 		var meta = parseMetadata();
@@ -292,13 +297,13 @@ class Parser {
 			switch( id ) {
 			case "public", "protected", "private", "abstract", "static", "strictfp", "final": kwds.push(id);
 			case "class":
-				return CDef(parseClass(kwds,meta, min));
+				return CDef(parseClass(kwds,meta, min, comments));
 			case "interface":
-				var c = parseClass(kwds, meta, min);
+				var c = parseClass(kwds, meta, min, comments);
 				c.isInterface = true;
 				return CDef(c);
 			case "enum":
-				var e = parseEnum(kwds, meta, min);
+				var e = parseEnum(kwds, meta, min, comments);
 				return EDef(e);
 			default: unexpected(TId(id));
 			}
@@ -336,7 +341,7 @@ class Parser {
 		return ret;
 	}
 	
-	function parseEnum(kwds, meta, min) : EnumDef
+	function parseEnum(kwds, meta, min, header) : EnumDef
 	{
 		var ename = id();
 		//var types = parseTypeParameters();
@@ -352,6 +357,7 @@ class Parser {
 		//parse constructors
 		
 		var constrs = [];
+		var comments = [];
 		while (true)
 		{
 			var min = pos;
@@ -382,8 +388,13 @@ class Parser {
 					name : id,
 					args : args,
 					meta : meta,
-					pos : mkPos(min)
+					pos : mkPos(min),
+					comments : comments
 				});
+				
+				comments = [];
+			case TComment(s, b):
+				comments.push(mk(JComment(s,b), min));
 			default:
 				unexpected(tk);
 			}
@@ -392,6 +403,7 @@ class Parser {
 		var fields = parseFields();
 		
 		return {
+			comments : header,
 			meta : meta,
 			kwds : kwds,
 			//types : types,
@@ -413,12 +425,12 @@ class Parser {
 		return { min : min, max : max, file:file };
 	}
 	
-	function parseClass(kwds,meta, min) : ClassDef {
+	function parseClass(kwds,meta, min, header) : ClassDef {
 		var cname = id();
 		#if debug trace("parseClass(" + cname + ")"); #end
 		var types = parseTypeParameters();
 		var fields = new Array();
-		var impl = [], extend = null, staticInit = null, instInit = null;
+		var impl = [], extend = [], staticInit = null, instInit = null;
 		while( true ) {
 			if( opt(TId("implements")) ) {
 				impl.push(parseType());
@@ -426,8 +438,10 @@ class Parser {
 					impl.push(parseType());
 				continue;
 			}
-			if( opt(TId("extends")) ) {
-				extend = parseType();
+			if ( opt(TId("extends")) ) {
+				extend.push(parseType());
+				while( opt(TComma) )
+					extend.push(parseType());
 				continue;
 			}
 			break;
@@ -438,6 +452,7 @@ class Parser {
 		
 		#if debug trace("parseClass("+cname+") finished"); #end
 		return {
+			comments : header,
 			kwds : kwds,
 			isInterface : false,
 			meta : meta,
@@ -463,6 +478,7 @@ class Parser {
 			var kwds = [];
 			var comments = [];
 			var lastTypes = null;
+			var lastComment = null;
 			while( true )  {
 				var t = token();
 				switch( t ) {
@@ -483,12 +499,14 @@ class Parser {
 					break;
 				case TId(id):
 					switch( id ) {
-					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp": kwds.push(id);
+					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "final": kwds.push(id);
 					case "class":
-						var c = CDef(parseClass(kwds, meta, min));
+						var c = CDef(parseClass(kwds, meta, min, lastComment));
+						lastComment = null;
 						childDefs.push(c);
 					case "enum":
-						var e = EDef(parseEnum(kwds, meta, min));
+						var e = EDef(parseEnum(kwds, meta, min, lastComment));
+						lastComment = null;
 						childDefs.push(e);
 					default:
 						add(t);
@@ -539,7 +557,7 @@ class Parser {
 							lastTypes = null;
 							
 							fields.push( {
-								comments: [],
+								comments: lastComment,
 								kwds : kwds,
 								meta : meta,
 								name : name,
@@ -555,6 +573,7 @@ class Parser {
 								pos : mkPos(min)
 							} );
 							
+							lastComment = null;
 						} else {
 							var val = null;
 							if (opt(TOp("=")))
@@ -563,7 +582,7 @@ class Parser {
 							var lt = lastTypes;
 							lastTypes = null;
 							fields.push({
-								comments : [],
+								comments : lastComment,
 								kwds: kwds,
 								meta : meta,
 								name : name,
@@ -572,12 +591,19 @@ class Parser {
 								pos : mkPos(min)
 							});
 							end();
+							
+							lastComment = null;
 						}
 						
 						break;
 					}
-				case TComment(s,b):
-					fields.push({types: null, name:null, meta:null, kwds:[], kind:FComment, comments:[mk( JComment(s,b), min ) ], pos : mkPos(min)});
+				case TComment(s, b):
+					if (lastComment != null)
+					{
+						lastComment.push(mk( JComment(s, b), min ));
+					} else {
+						lastComment = [mk( JComment(s, b), min )];
+					}
 					break;
 				case TOp(op):
 					if (op == "<") // start of generics
@@ -611,6 +637,12 @@ class Parser {
 		{
 			isFinal = true;
 			t = id();
+			//switch(t)
+			//{
+			//case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "class", "enum", "final", "interface":
+				//add(t);
+				//add("final");
+			//}
 		}
 		
 		var a = [t];
@@ -877,6 +909,8 @@ class Parser {
 				toRollback.push(tk);
 				switch(tk)
 				{
+					case TId("return"):
+						return rollback();
 					case TId(s):
 						if (inArrDecl) return rollback();
 						if (hadId && genDecl == 0)
@@ -1211,10 +1245,10 @@ class Parser {
 			}
 			mk(JSwitch(e, cl, def), 2);
 		case "class":
-			var cl = parseClass([], [], min);
+			var cl = parseClass([], [], min, []);
 			mk(JInnerDecl(CDef(cl)), min);
 		case "enum":
-			var e = parseEnum([], [], min);
+			var e = parseEnum([], [], min, []);
 			mk(JInnerDecl(EDef(e)), min);
 		case "synchronized":
 			ensure(TPOpen);

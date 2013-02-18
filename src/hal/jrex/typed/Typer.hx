@@ -15,7 +15,7 @@ class TyperContext
 {
 	public static var ids:Int = 0;
 	
-	public var typed:Hash<TDefinition>;
+	public var typed:StringMap<TDefinition>;
 	public var typersLeft:Array<Typer>;
 	
 	public var tbyte:TTypeT;
@@ -30,16 +30,18 @@ class TyperContext
 	
 	public var tstring:TTypeT;
 	public var tobject:TTypeT;
+	public var tenum:TTypeT;
 	
 	public function new()
 	{
-		this.typed = new Hash();
+		this.typed = new StringMap();
 		tbyte = TBasic(TByte); tshort = TBasic(TShort); tchar = TBasic(TChar); tsingle = TBasic(TSingle); tfloat = TBasic(TFloat);
 		tlong = TBasic(TLong); tbool = TBasic(TBool); tvoid = TBasic(TVoid);
 		
 		///here
 		tstring = null; //FIXME
 		tobject = null; //FIXME
+		tenum = null; //FIXME
 	}
 	
 	public function allocVar(name:String, t:TType):Var
@@ -93,23 +95,23 @@ class Typer
 	static var tlazy = Type.enumIndex(TLazy(null));
 	
 	private var ctx:TyperContext;
-	private var imported:Hash<TDefinition>;
+	private var imported:StringMap<TDefinition>;
 	private var imports:Array< Array<String> >;
-	private var contextVars:Array<Hash<Var>>;
+	private var contextVars:Array<StringMap<Var>>;
 	private var topLevel:TDefinition;
 	private var children:Array<TDefinition>;
-	private var tparams:Hash<Array<TypeParameter>>;
+	private var tparams:StringMap<Array<TypeParameter>>;
 	
 	private var current:Null<TDefinition>;
 	
 	public function new(ctx)
 	{
 		this.ctx = ctx;
-		this.imported = new Hash();
+		this.imported = new StringMap();
 		this.contextVars = [];
 		this.imports = [];
 		this.children = [];
-		this.tparams = new Hash();
+		this.tparams = new StringMap();
 		
 		ctx.typersLeft.push(this);
 	}
@@ -153,7 +155,7 @@ class Typer
 	
 	private function pushBlock()
 	{
-		contextVars.push(new Hash());
+		contextVars.push(new StringMap());
 	}
 	
 	private function popBlock()
@@ -377,6 +379,24 @@ class Typer
 		return applyParams(types, p, t);
 	}
 	
+	private function tparamsToType(params:hal.jrex.typed.JavaTyped.TParams):Array<TTypeT>
+	{
+		if (params == null || params.length == 0)
+			return null;
+		
+		return params.map(function(p)
+			return switch(p)
+			{
+			case T(t):t;
+			case TWildcard(ext, sup):
+				if (ext != null)
+					ext;
+				else
+					ctx.tobject;
+			}
+		).array();
+	}
+	
 	private function applyParams(types:Array<TypeParameter>, params:Array<TTypeT>, t:TTypeT):TTypeT
 	{
 		if (types == null || types.length == 0)
@@ -534,8 +554,8 @@ class Typer
 			
 			orderedStatics : [],
 			orderedFields : [],
-			statics : new Hash(),
-			fields : new Hash(),
+			statics : new StringMap(),
+			fields : new StringMap(),
 			staticInit : null,
 			instInit : null,
 			pos : c.pos,
@@ -610,14 +630,14 @@ class Typer
 			
 			orderedStatics : [],
 			orderedFields : [],
-			statics : new Hash(),
-			fields : new Hash(),
+			statics : new StringMap(),
+			fields : new StringMap(),
 			staticInit : null,
 			instInit : null,
 			pos : en.pos,
 			
 			orderedConstrs : [],
-			constrs : new Hash(),
+			constrs : new StringMap(),
 		};
 		untyped ret._rel = en;
 		
@@ -944,7 +964,7 @@ class Typer
 		}
 	}
 	
-	private function solveOverload(params:Array<TExpr>, fields:Array<TClassField>):Null<{ cf:TClassField, types:Null<Array<TTypeT>> }>
+	private function solveOverload(params:Array<TExpr>, fields:Array<TClassField>, ?types:Array<TypeParameter>, ?tparams:Array<TTypeT>):Null<{ cf:TClassField, types:Null<Array<TTypeT>> }>
 	{
 		var len = params.length;
 		
@@ -957,6 +977,9 @@ class Typer
 				for (i in 0...len)
 				{
 					var p = params[i].type;
+					if (types != null && types.length != 0)
+						p.type = applyParams(types, tparams, p.type);
+					
 					var op = f.args[i];
 					if (op == null)
 						if (f.argsCount == -1) 
@@ -979,6 +1002,90 @@ class Typer
 		return null;
 	}
 	
+	private function mkStaticFieldAccess(def:TDefinition, callParams:Array<TExpr>, field:String, fields:Array<TClassField>, pos:Pos)
+	{
+		return if (callParams != null)
+		{
+			var cf = solveOverload(callParams, fields);
+			if (cf == null) throw NoOverloadFound(defToT(def), field, true, callParams.map(function(p) return p.type.type), pos);
+			
+			var ret = applyParams(cf.cf.types, cf.types, cf.cf.args[0].type);
+			mk2(TStaticCall(cf.cf, cf.types, callParams), ret, pos);
+		} else {
+			if (fields.length > 1 || fields[0].argsCount != -1) throw AccessFieldWithoutCalling(defToT(def), field, true, pos);
+			mk(TStaticField(fields[0]), fields[0].type, pos);
+		}
+	}
+	
+	private function mkFieldAccess(e1:TExpr, callParams:Array<TExpr>, field:String, fields:Array<TClassField>, pos:Pos, ?types:Array<TypeParameter>, ?params:Array<TTypeT>)
+	{
+		return if (callParams != null)
+		{
+			var cf = solveOverload(callParams, fields, types, params);
+			if (cf == null) throw NoOverloadFound(e1.type.type, field, false, callParams.map(function(p) return p.type.type), pos);
+			
+			var ret = applyParams(cf.cf.types, cf.types, cf.cf.args[0].type);
+			mk2(TMemberCall(e1, cf.cf, cf.types, callParams), ret, pos);
+		} else {
+			if (fields.length > 1 || fields[0].argsCount != -1) throw AccessFieldWithoutCalling(e1.type.type, field, false, pos);
+			mk(TClassField(e1, fields[0]), fields[0].type, pos);
+		}
+	}
+	
+	private function getDef(t:TTypeT):TDefinition
+	{
+		return switch(follow(t))
+		{
+		case TInst(c, _): TCDef(c);
+		case TEnum(e): TEDef(e);
+		case TBasic(_): throw "assert";
+		default: TNotFound;
+		}
+	}
+	
+	private function mkMaybeFieldAccess(e1:TExpr, t:TTypeT, field:String, pos:Pos, ?callParams:Array<TExpr>):TExpr
+	{
+		switch(follow(t))
+		{
+		case TBasic( _ ): throw ErrorMessage("Basic types do not have fields!", pos);
+		case TEnum( en ):
+			var fields = en.fields.get(field);
+			if (fields == null)
+			{
+				return mkMaybeFieldAccess(e1, ctx.tenum, field, pos, callParams);
+			} else {
+				return mkFieldAccess(e1, callParams, field, fields, pos);
+			}
+		case TInst( cl, params ):
+			var fields = cl.fields.get(field);
+			if (fields != null)
+			{
+				return mkFieldAccess(e1, callParams, field, fields, pos, cl.types, tparamsToType(params));
+			} else {
+				var super_t = cl.extend;
+				if (super_t != null)
+				{
+					//TODO: needs to applyParams here
+					return mkMaybeFieldAccess(e1, applyParams(cl.types, tparamsToType(params), super_t), field, pos, callParams);
+				} else {
+					throw UnboundField(t, field, false, pos);
+				}
+			}
+		case TArray(t):
+			if (field == "length" && callParams == null)
+			{
+				return mk2(TField(e1, field), ctx.tint, pos);
+			} else {
+				throw UnboundField(t, field, false, pos);
+			}
+		case TTypeParam(tp):
+			//TODO use extends, super to be able to know which expr
+			return mk2(TField(e1, field), TLazy( { ref:null } ), pos);
+		case TUnknown(_), TLazy(_):
+			return mk2(TField(e1, field), TLazy( { ref:null } ), pos);
+		}
+	}
+	
 	private function mkMaybeStaticField(e1:TExpr, field:String, pos:Pos, ?callParams:Array<TExpr>):TExpr
 	{
 		return switch(e1.expr)
@@ -990,28 +1097,24 @@ class Typer
 			{
 			case TCDef(c):
 				var s = c.statics.get(field);
-				if (s == null) throw UnboundField(def, field, true, pos);
-				if (callParams != null)
-				{
-					var cf = solveOverload(callParams, s);
-					if (cf == null) throw NoOverloadFound(def, field, true, callParams.map(function(p) return p.type.type), pos);
-					
-					var ret = applyParams(cf.cf.types, cf.types, cf.cf.args[0].type);
-					mk2(TStaticCall(cf.cf, cf.types, callParams), ret, pos);
-				} else {
-					if (s.length > 1 || s[0].argsCount != -1) throw AccessFieldWithoutCalling(def, field, true, pos);
-					mk(TStaticField(s[0]), s[0].type, pos);
-				}
+				if (s == null) throw UnboundField(e1.type.type, field, true, pos);
+				mkStaticFieldAccess(def, callParams, field, s, pos);
 			case TEDef(e):
-				///here
-				null;
+				var c = e.constrs.get(field);
+				if (c != null) {
+					mk2(TEnumField(c), TEnum(e), pos);
+				} else {
+					var fields = e.statics.get(field);
+					if (fields == null) throw UnboundField(e1.type.type, field, true, pos);
+					mkStaticFieldAccess(def, callParams, field, fields, pos);
+				}
 			case TNotFound:
 				if (callParams != null)
 				{
-					
+					mk2(TField(e1, field), TUnknown(null), pos);
+				} else {
+					mk2(TCall(e1, field, callParams), TUnknown(null), pos);
 				}
-				null;
-				//mk2(
 			}
 		default: //call non-static field handler
 			null;
@@ -1076,6 +1179,13 @@ class Typer
 				if (t != null)
 				{
 					return mk2(TTypeExpr(t), ctx.tclass(defToT(t)), expr.pos);
+				} else {
+					arr.push(f);
+					var t = lookupPath(arr);
+					if (t != null)
+					{
+						return mk2(TTypeExpr(t), ctx.tclass(defToT(t)), expr.pos);
+					}
 				}
 			}
 			
@@ -1086,6 +1196,7 @@ class Typer
 				if (c.name == "Class" && c.pack[0] == "java" && c.pack[1] == "lang")
 				{
 					///here
+					//mkMaybeStaticField
 				}
 			default:
 			}

@@ -125,8 +125,8 @@ typedef TBaseDef = {
 	
 	var orderedStatics : Array<TClassField>;
 	var orderedFields : Array<TClassField>;
-	var statics : Hash<Array<TClassField>>;
-	var fields : Hash<Array<TClassField>>;
+	var statics : StringMap<Array<TClassField>>;
+	var fields : StringMap<Array<TClassField>>;
 	
 	var staticInit : Null<TExpr>;
 	var instInit : Null<TExpr>;
@@ -154,7 +154,7 @@ typedef TEnumDef = {
 	> TBaseDef,
 	
 	var orderedConstrs : Array<TEnumField>;
-	var constrs : Hash<TEnumField>;
+	var constrs : StringMap<TEnumField>;
 	
 }
 
@@ -179,7 +179,7 @@ enum TExprExpr
 	TField( e : TExpr, f : String ); //for not found fields (maybe unavailable source code)
 	TBinop( op : String, e1 : TExpr, e2 : TExpr );
 	TUnop( op : String, prefix : Bool, e : TExpr );
-	TMemberCall( e : TExpr, field : TClassField, tparams : TParams, params : Array<TExpr> );
+	TMemberCall( e : TExpr, field : TClassField, tparams : Null<Array<TTypeT>>, params : Array<TExpr> );
 	TStaticCall( field : TClassField, tparams : Null<Array<TTypeT>>, params : Array<TExpr> );
 	TCall( e : TExpr, field : String, params : Array<TExpr> ); //for not found fields
 	TTypeExpr( def : TDefinition ); //equivalent of MyClass / MyClass.class 

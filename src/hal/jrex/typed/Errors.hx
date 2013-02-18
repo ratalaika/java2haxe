@@ -10,7 +10,8 @@ import hal.jrex.typed.JavaTyped;
 enum TyperError
 {
 	NotFoundVar(v:String, pos:Pos);
-	UnboundField(def:TDefinition, field:String, isStatic:Bool, pos:Pos);
-	NoOverloadFound(def:TDefinition, field:String, isStatic:Bool, types:Iterable<TTypeT>, pos:Pos);
-	AccessFieldWithoutCalling(def:TDefinition, field:String, isStatic:Bool, pos:Pos);
+	UnboundField(def:TTypeT, field:String, isStatic:Bool, pos:Pos);
+	NoOverloadFound(def:TTypeT, field:String, isStatic:Bool, types:Iterable<TTypeT>, pos:Pos);
+	AccessFieldWithoutCalling(def:TTypeT, field:String, isStatic:Bool, pos:Pos);
+	ErrorMessage(msg:String, pos:Pos);
 }
