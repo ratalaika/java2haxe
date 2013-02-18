@@ -115,7 +115,7 @@ typedef Metadata = Array<{ name : String, args : Array<{ name : String, val : Ex
 
 typedef ClassField = {
 	var meta : Metadata;
-	var comments : Array<Expr>;
+	var comments : Null<Array<Expr>>;
 	var kwds : Array<String>;
 	var name : String;
 	var kind : FieldKind;
@@ -124,7 +124,7 @@ typedef ClassField = {
 }
 
 typedef EnumField = {
-	var comments : Array<Expr>;
+	var comments : Null<Array<Expr>>;
 	var name : String;
 	var args : Null<Array<Expr>>;
 	var meta : Metadata;

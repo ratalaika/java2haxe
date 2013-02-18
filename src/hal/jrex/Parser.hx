@@ -81,10 +81,12 @@ class Parser {
 	var idents : Array<Bool>;
 	var tokens : GenericStack<Token>;
 	var no_comments : Bool;
+	var lastComments : Array<Token>;
 	
 	var pos:Int;
 
 	public function new() {
+		lastComments = [];
 		line = 1;
 		identChars = "$ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 		var p = [
@@ -473,15 +475,19 @@ class Parser {
 	{
 		var fields = [], staticInit = null, instInit = null, childDefs = [];
 		while( true ) {
-			if( opt(TBrClose) ) break;
+			if ( opt(TBrClose) ) break;
 			var meta = parseMetadata();
 			var min = pos;
 			var kwds = [];
 			var comments = [];
 			var lastTypes = null;
 			var lastComment = null;
-			while( true )  {
-				var t = token();
+			while ( true )  {
+				var t = lastComments.pop();
+				if (t == null)
+					t = token();
+				else
+					lastComments = [];
 				switch( t ) {
 				case TBrOpen:
 					add(t);
@@ -617,7 +623,6 @@ class Parser {
 					} else {
 						lastComment = [mk( JComment(s, b), min )];
 					}
-					break;
 				case TOp(op):
 					if (op == "<") // start of generics
 					{
@@ -1675,7 +1680,13 @@ class Parser {
 								line = old;
 								throw EUnterminatedComment;
 							}
-							return no_comments ? token() : TComment(contents, true);
+							if (no_comments)
+							{
+								lastComments.push(TComment(contents, true));
+								return token();
+							}
+							
+							return TComment(contents, true);
 						}
 						if( op == "!=" ) {
 							char = nextChar();

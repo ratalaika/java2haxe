@@ -49,8 +49,12 @@ class HaxeExtern
 	
 	private function convertClass(c:ClassDef, defStack:Array<String>)
 	{
-		if (c.comments != null) for (c in c.comments)
-			expr(c);
+		if (c.comments != null) 
+		{	
+			for (c in c.comments)
+				expr(c);
+			//w("\n");
+		}
 		
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "') ");
@@ -82,10 +86,15 @@ class HaxeExtern
 			if (f.kwds.has('private')) continue; //no private fields on externs
 			
 			w('\t');
-			if (f.comments != null) for (c in f.comments) expr(c);
+			if (f.comments != null) 
+			{
+				for (c in f.comments) expr(c);
+				w("\t");
+			}
+			
 			switch(f.kind)
 			{
-			case FVar(vt, v):
+			case FVar(vt, _):
 				var isFinal = vt.final || f.kwds.remove("final");
 				var isStatic = f.kwds.remove('static');
 				
@@ -100,7 +109,7 @@ class HaxeExtern
 				w('var '); w(id(f.name));
 				if (isFinal)
 					w('(default, null)');
-				w(' : '); w(t(vt)); w(';\n');
+				w(' : '); w(t(vt)); w(';\n\n');
 			case FFun(fn):
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				var isStatic = f.kwds.remove('static');
@@ -115,7 +124,10 @@ class HaxeExtern
 				w(access);
 				if (isStatic) w("static ");
 				w('function ');
-				w(f.name);
+				if (f.name == c.name)
+					w("new");
+				else
+					w(f.name);
 				
 				if (f.types != null && f.types.length > 0)
 					w("<" + f.types.map(generic).join(", ") + ">");
@@ -141,7 +153,7 @@ class HaxeExtern
 				}
 				w(") : ");
 				w(t(fn.ret));
-				w(";\n");
+				w(";\n\n");
 			}
 		}
 		
@@ -219,8 +231,12 @@ class HaxeExtern
 	
 	private function convertEnum(e:EnumDef, defStack:Array<String>)
 	{
-		if (e.comments != null) for (c in e.comments)
-			expr(c);
+		if (e.comments != null) {
+			for (c in e.comments)
+				expr(c);
+			//w("\n");
+		}
+		
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "') ");
 		
@@ -231,12 +247,17 @@ class HaxeExtern
 		for ( ctor in e.constrs )
 		{
 			w('\t');
-			for (c in ctor.comments)
-				expr(c);
+			if (ctor.comments != null)
+			{
+				for (c in ctor.comments)
+					expr(c);
+				w("\t");
+			}
+			
 			w(ctor.name);
 			w(';\n');
 		}
-		w('}\n');
+		w('}\n\n');
 		
 		defStack.push(e.name);
 		for (d in e.childDefs)
