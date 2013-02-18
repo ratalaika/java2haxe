@@ -12,14 +12,29 @@ class HaxeExtern
 {
 	private var out:Output;
 	private var program:Program;
+	private var indent:Array<String>;
+	private var iereg:EReg;
+	
 	public function new(out:Output) 
 	{
+		this.iereg = ~/^( +)/mg;
+		this.indent = [];
 		this.out = out;
 	}
 	
-	private function newline()
+	private function beginIndent()
 	{
-		out.writeString('\n');
+		indent.push('\t');
+	}
+	
+	private function endIndent()
+	{
+		indent.pop();
+	}
+	
+	private function nl()
+	{
+		out.writeString('\n' + indent.join(""));
 	}
 	
 	public function convertModule(p:Program)
@@ -53,7 +68,6 @@ class HaxeExtern
 		{	
 			for (c in c.comments)
 				expr(c);
-			//w("\n");
 		}
 		
 		if (defStack.length > 0)
@@ -78,18 +92,19 @@ class HaxeExtern
 			w(' extends ' + c.extend.map(t).join(", "));
 		if (c.implement.length > 0)
 			w(' implements ' + c.implement.map(t).join(', '));
-		
-		w('\n{\n');
+			
+		nl();
+		w('{');
+		beginIndent();
+		nl();
 		
 		for (f in c.fields)
 		{
 			if (f.kwds.has('private')) continue; //no private fields on externs
 			
-			w('\t');
 			if (f.comments != null) 
 			{
 				for (c in f.comments) expr(c);
-				w("\t");
 			}
 			
 			switch(f.kind)
@@ -109,7 +124,7 @@ class HaxeExtern
 				w('var '); w(id(f.name));
 				if (isFinal)
 					w('(default, null)');
-				w(' : '); w(t(vt)); w(';\n\n');
+				w(' : '); w(t(vt)); w(';'); nl(); nl();
 			case FFun(fn):
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				var isStatic = f.kwds.remove('static');
@@ -153,11 +168,14 @@ class HaxeExtern
 				}
 				w(") : ");
 				w(t(fn.ret));
-				w(";\n\n");
+				w(";"); nl(); nl();
 			}
 		}
 		
-		w('}\n\n');
+		endIndent();
+		nl();
+		w('}');
+		nl();
 		
 		defStack.push(c.name);
 		for (d in c.childDefs)
@@ -243,21 +261,27 @@ class HaxeExtern
 		if (e.kwds.has("private") || e.kwds.has("protected"))
 			w('private');
 		w('extern enum ' + (defStack.length > 0 ? defStack.join("_") + "_" + e.name : e.name));
-		w('\n{\n');
+		nl();
+		w('{');
+		beginIndent();
+		nl();
 		for ( ctor in e.constrs )
 		{
-			w('\t');
 			if (ctor.comments != null)
 			{
 				for (c in ctor.comments)
 					expr(c);
-				w("\t");
 			}
 			
 			w(ctor.name);
-			w(';\n');
+			w(';');
+			nl();
 		}
-		w('}\n\n');
+		endIndent();
+		nl();
+		w('}');
+		nl();
+		nl();
 		
 		defStack.push(e.name);
 		for (d in e.childDefs)
@@ -281,8 +305,10 @@ class HaxeExtern
 			case JComment(s, isBlock):
 				if (isBlock)
 				{
+					var tabs = indent.join("");
+					s = iereg.replace(s, tabs);
 					out.writeString(s);
-					out.writeString("\n");
+					nl();
 				} else {
 					out.writeString("//");
 					out.writeString(s);

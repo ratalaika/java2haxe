@@ -365,7 +365,11 @@ class Parser {
 			var min = pos;
 			var meta = parseMetadata();
 			
-			var tk = token();
+			var tk = lastComments.pop();
+			if (tk == null)
+				tk = token();
+			else
+				lastComments = [];
 			switch(tk)
 			{
 			case TBrClose:
