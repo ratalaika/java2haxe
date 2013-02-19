@@ -45,7 +45,8 @@ class HaxeExtern
 			out.writeString("package " + p.pack.join(".") + ";\n");
 		}
 		
-		definition(p.def, []);
+		for (def in p.defs)
+			definition(def, []);
 	}
 	
 	private function definition(d:Definition, defStack:Array<String>)

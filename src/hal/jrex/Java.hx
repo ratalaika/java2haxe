@@ -111,7 +111,7 @@ typedef Function = {
 	var pos : Pos;
 }
 
-typedef Metadata = Array<{ name : String, args : Array<{ name : String, val : Expr }>, pos : Pos }>;
+typedef Metadata = Array<{ name : String, args : Null<Array<Expr>>, pos : Pos }>;
 
 typedef ClassField = {
 	var meta : Metadata;
@@ -172,5 +172,5 @@ typedef Program = {
 	var pack : Array<String>;
 	var imports : Array<{ path:Array<String>, isStatic:Bool }>;
 	var name : String;
-	var def : Definition;
+	var defs : Array<Definition>;
 }

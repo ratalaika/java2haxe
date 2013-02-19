@@ -199,12 +199,17 @@ class Parser {
 		}
 		var imports = [];
 		var defs = [];
+		var metas = null;
 		while ( true ) {
 			var tpos = pos;
 			var tk = token();
 			switch( tk ) {
 			case TEof:
 				break;
+			case TAt:
+				add(tk);
+				metas = parseMetadata();
+				continue;
 			case TId(id):
 				switch( id ) {
 				case "import":
@@ -212,8 +217,9 @@ class Parser {
 					continue;
 				case "public", "class", "enum", "protected", "private", "abstract", "static", "final", "strictfp", "interface":
 					add(tk);
-					defs.push(parseDefinition(tpos, header));
+					defs.push(parseDefinition(tpos, header, metas));
 					header = [];
+					metas = null;
 					continue;
 				default:
 				}
@@ -231,12 +237,12 @@ class Parser {
 		};
 		
 		//defs will always have one element only
-		if (defs.length != 1) throw "unexpected";
+		//if (defs.length != 1) throw "unexpected";
 		return {
 			//header : header,
 			pack : pack,
 			imports : imports,
-			def : defs[0],
+			defs : defs,
 			name : name,
 		};
 	}
@@ -256,6 +262,7 @@ class Parser {
 				case TOp(op):
 					if( op == "*" ) {
 						a.push(op);
+						ensure(TSemicolon);
 						break;
 					}
 					unexpected(tk);
@@ -276,43 +283,46 @@ class Parser {
 		while( opt(TAt) ) {
 			var min = pos;
 			var name = id();
-			var args = [];
-			if( opt(TPOpen) )
-				while( !opt(TPClose) ) {
-					var n = null;
-					switch(peek()) {
-					case TId(i):
-						n = id();
-						ensure(TOp("="));
-					case TConst(_):
-					default:
-						unexpected(peek());
-					}
-					var e = parseExpr(true);
-					args.push( { name : n, val :e } );
-					opt(TComma);
-				}
+			var args = null;
+			if ( opt(TPOpen) )
+			{
+				args = parseExprList(TPClose);
+			}
 			ml.push( { name : name, args : args, pos : mkPos(min) } );
 		}
 		return ml;
 	}
 	
-	function parseDefinition(min:Int, comments) {
+	function parseDefinition(min:Int, comments, meta) {
 		#if debug trace("parseDefinition()"); #end
 		var kwds = [];
-		var meta = parseMetadata();
-		while( true ) {
+		//var meta = parseMetadata();
+		while ( true ) {
+			if (peek() == TAt)
+			{
+				token();
+				ensure(TId("interface"));
+				kwds.push("_interface");
+				var c = parseClass(kwds, meta, min, comments);
+				c.isInterface = true;
+				return CDef(c);
+			}
+			
 			var id = id();
 			switch( id ) {
 			case "public", "protected", "private", "abstract", "static", "strictfp", "final": kwds.push(id);
 			case "class":
-				return CDef(parseClass(kwds,meta, min, comments));
+				var ret = CDef(parseClass(kwds, meta, min, comments));
+				end();
+				return ret;
 			case "interface":
 				var c = parseClass(kwds, meta, min, comments);
+				end();
 				c.isInterface = true;
 				return CDef(c);
 			case "enum":
 				var e = parseEnum(kwds, meta, min, comments);
+				end();
 				return EDef(e);
 			default: unexpected(TId(id));
 			}
@@ -520,6 +530,7 @@ class Parser {
 					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "final": kwds.push(id);
 					case "class", "interface":
 						var c1 = parseClass(kwds, meta, min, lastComment);
+						end();
 						var c = CDef(c1);
 						if (id == "interface")
 							c1.isInterface = true;
@@ -528,6 +539,7 @@ class Parser {
 						break;
 					case "enum":
 						var e = EDef(parseEnum(kwds, meta, min, lastComment));
+						end();
 						lastComment = null;
 						childDefs.push(e);
 						break;
@@ -555,6 +567,14 @@ class Parser {
 						{
 							add(TPOpen);
 							var args = parseFunArgs();
+							
+							while (opt(TBkOpen))
+							{
+								var tk = token();
+								if (tk != TBkClose)
+									unexpected(tk);
+								t.t = TArray(t.t);
+							}
 							
 							var throws = [];
 							if (opt(TId("throws")))
@@ -598,33 +618,61 @@ class Parser {
 							
 							lastComment = null;
 						} else {
-							var val = null;
-							while (opt(TBkOpen))
+							do
 							{
-								var tk = token();
-								if (tk != TBkClose)
-									unexpected(tk);
-								t.t = TArray(t.t);
-							}
+								if (name == null)
+								{
+									name = this.id();
+								}
 								
-							if (opt(TOp("=")))
-								val = parseExpr(true);
-							
-							
-							var lt = lastTypes;
-							lastTypes = null;
-							fields.push({
-								comments : lastComment,
-								kwds: kwds,
-								meta : meta,
-								name : name,
-								types : lt,
-								kind : FVar(t, val),
-								pos : mkPos(min)
-							});
-							end();
-							
-							lastComment = null;
+								var val = null;
+								while (opt(TBkOpen))
+								{
+									var tk = token();
+									if (tk != TBkClose)
+										unexpected(tk);
+									t.t = TArray(t.t);
+								}
+									
+								if (opt(TOp("=")))
+								{
+									if (onlyDefinitions)
+									{
+										var nbr = 0;
+										var foundSemi = false;
+										while (!foundSemi) 
+										{
+											switch(token())
+											{
+												case TSemicolon if (nbr == 0):
+													foundSemi = true;
+												case TBrOpen: nbr++;
+												case TBrClose: nbr--;
+												default:
+											}
+										}
+									} else {
+										val = parseExpr(true);
+									}
+								}
+								
+								
+								var lt = lastTypes;
+								lastTypes = null;
+								fields.push({
+									comments : lastComment,
+									kwds: kwds,
+									meta : meta,
+									name : name,
+									types : lt,
+									kind : FVar(t, val),
+									pos : mkPos(min)
+								});
+								
+								lastComment = null;
+								name = null;
+								if (opt(TSemicolon)) break;
+							} while (opt(TComma));
 						}
 						
 						break;
@@ -1376,7 +1424,7 @@ class Parser {
 			if( opt(etk) )
 				return args;
 			while( true ) {
-				args.push(full ? parseFullExpr() : parseExpr(false));
+				args.push(full ? parseFullExpr() : parseExpr(true));
 				var tk = token();
 				if (tk == etk) break;
 				
