@@ -8,35 +8,35 @@ using Lambda;
  * @author waneck
  */
 
-class HaxeExtern 
+class HaxeExtern
 {
 	private var out:Output;
 	private var program:Program;
 	private var indent:Array<String>;
 	private var iereg:EReg;
-	
-	public function new(out:Output) 
+
+	public function new(out:Output)
 	{
 		this.iereg = ~/^( +)/mg;
 		this.indent = [];
 		this.out = out;
 	}
-	
+
 	private function beginIndent()
 	{
 		indent.push('\t');
 	}
-	
+
 	private function endIndent()
 	{
 		indent.pop();
 	}
-	
+
 	private function nl()
 	{
 		out.writeString('\n' + indent.join(""));
 	}
-	
+
 	public function convertModule(p:Program)
 	{
 		this.program = p;
@@ -44,11 +44,11 @@ class HaxeExtern
 		{
 			out.writeString("package " + p.pack.join(".") + ";\n");
 		}
-		
+
 		for (def in p.defs)
 			definition(def, []);
 	}
-	
+
 	private function definition(d:Definition, defStack:Array<String>)
 	{
 		switch(d)
@@ -57,68 +57,74 @@ class HaxeExtern
 		case CDef(c): convertClass(c, defStack);
 		}
 	}
-	
+
 	private inline function w(s:String)
 	{
 		out.writeString(s);
 	}
-	
+
 	private function convertClass(c:ClassDef, defStack:Array<String>)
 	{
-		if (c.comments != null) 
-		{	
+		//don't compile private or internal
+		if (c.kwds.has("private") || (!c.kwds.has("protected") && !c.kwds.has("public")))
+			return;
+
+		if (c.comments != null)
+		{
 			for (c in c.comments)
 				expr(c);
 		}
-		
+
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "') ");
-		if (c.kwds.has("private") || c.kwds.has("protected"))
+
+		if (c.kwds.has("protected"))
 			w('private ');
 		if (c.isInterface)
 			w('extern interface ');
 		else
 			w('extern class ');
 		w((defStack.length > 0 ? defStack.join("_") + "_" + c.name : c.name));
-		
+
 		if (c.types.length > 0)
 			w('<' + c.types.map(function(g) return g.name).join(", ") + '>');
-		
+
 		c.extend = c.extend.filter(function(v) switch(v.t) {
 			case TPath(p, _): if (p[0] == "java" && p[1] == "lang" && p[2] == "object") return false; return true;
 			default: return true;
 		}).array();
-		
+
 		if (c.extend.length > 0)
 			w(' extends ' + c.extend.map(t).join(", "));
 		if (c.implement.length > 0)
 			w(' implements ' + c.implement.map(t).join(', '));
-			
+
 		nl();
 		w('{');
 		beginIndent();
 		nl();
-		
+
 		for (f in c.fields)
 		{
-			if (f.kwds.has('private')) continue; //no private fields on externs
-			
-			if (f.comments != null) 
+			//don't compile private or internal
+			if (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public")))
+
+			if (f.comments != null)
 			{
 				for (c in f.comments) expr(c);
 			}
-			
+
 			switch(f.kind)
 			{
 			case FVar(vt, _):
 				var isFinal = vt.final || f.kwds.remove("final");
 				var isStatic = f.kwds.remove('static');
-				
+
 				f.kwds.remove('public');
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				for (k in f.kwds)
 					w("@:" + k +" ");
-				
+
 				w(access);
 				if (isStatic)
 					w('static ');
@@ -130,9 +136,9 @@ class HaxeExtern
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				var isStatic = f.kwds.remove('static');
 				f.kwds.remove('public');
-				
+
 				w("@:overload "); //necessary
-				
+
 				//for (tw in fn.throws)
 					//w("@:throws('" + t(tw) + "') ");
 				for (k in f.kwds)
@@ -144,7 +150,7 @@ class HaxeExtern
 					w("new");
 				else
 					w(f.name);
-				
+
 				if (f.types != null && f.types.length > 0)
 					w("<" + f.types.map(generic).join(", ") + ">");
 				w("(");
@@ -159,7 +165,7 @@ class HaxeExtern
 					w(" : ");
 					w(t(a.t));
 				}
-				
+
 				if (fn.varArgs != null)
 				{
 					if (!first) w(", ");
@@ -172,23 +178,23 @@ class HaxeExtern
 				w(";"); nl(); nl();
 			}
 		}
-		
+
 		endIndent();
 		nl();
 		w('}');
 		nl();
-		
+
 		defStack.push(c.name);
 		for (d in c.childDefs)
 			definition(d, defStack);
 		defStack.pop();
 	}
-	
+
 	private function t(t:T):String
 	{
 		return tpath(t.t);
 	}
-	
+
 	private function tpath(t:TPath):String
 	{
 		return switch(t)
@@ -202,7 +208,7 @@ class HaxeExtern
 			case TPath(["short"], []): "java.StdTypes.Int16";
 			case TPath(["boolean"], []): "Bool";
 			case TPath(["void"], []): "Void";
-			
+
 			case TPath(["java", "lang", "Integer"], [] ): "Null<Int>";
 			case TPath(["java", "lang", "Double"], [] ): "Null<Float>";
 			case TPath(["java", "lang", "Single"], [] ): "Null<Single>";
@@ -211,11 +217,11 @@ class HaxeExtern
 			case TPath(["java", "lang", "Character"], [] ): "Null<java.StdTypes.Char16>";
 			case TPath(["java", "lang", "Short"], [] ): "Null<java.StdTypes.Int16>";
 			case TPath(["java", "lang", "Long"], [] ): "Null<haxe.Int64>";
-			
+
 			case TPath(["java", "lang", "Object"], [] ): "Dynamic";
 			case TPath(["java", "lang", "String"], [] ): "String";
 			case TPath(["java", "lang", "Class"], params ): "Class<" + params.map(targ).join(", ") + ">";
- 
+
 			//case TPath(["java", "lang", ", params):
 			case TPath(p, params) if (params == null || params.length == 0):
 				p.join(".");
@@ -225,7 +231,7 @@ class HaxeExtern
 				"java.NativeArray<" + tpath(tp) + ">";
 		}
 	}
-	
+
 	private function targ(t:TArg):String
 	{
 		return switch(t)
@@ -234,31 +240,33 @@ class HaxeExtern
 			default: "Dynamic";
 		}
 	}
-	
+
 	private function id(s:String):String
 	{
 		//TODO include haxe keywords
 		return s;
 	}
-	
+
 	private function generic(gd:GenericDecl):String
 	{
 		if (gd.extend == null)
 			return gd.name;
 		return gd.name + " : " + gd.extend.map(t).join(", ");
 	}
-	
+
 	private function convertEnum(e:EnumDef, defStack:Array<String>)
 	{
+		if (e.kwds.has('private') || !(e.kwds.has('protected') || e.kwds.has('public')))
+			return;
 		if (e.comments != null) {
 			for (c in e.comments)
 				expr(c);
 			//w("\n");
 		}
-		
+
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "') ");
-		
+
 		if (e.kwds.has("private") || e.kwds.has("protected"))
 			w('private');
 		w('extern enum ' + (defStack.length > 0 ? defStack.join("_") + "_" + e.name : e.name));
@@ -273,7 +281,7 @@ class HaxeExtern
 				for (c in ctor.comments)
 					expr(c);
 			}
-			
+
 			w(ctor.name);
 			w(';');
 			nl();
@@ -283,13 +291,13 @@ class HaxeExtern
 		w('}');
 		nl();
 		nl();
-		
+
 		defStack.push(e.name);
 		for (d in e.childDefs)
 			definition(d, defStack);
 		defStack.pop();
 	}
-	
+
 	private function expr(e:Expr)
 	{
 		switch(e.expr)
@@ -318,5 +326,5 @@ class HaxeExtern
 			default: //do nothing
 		}
 	}
-	
+
 }

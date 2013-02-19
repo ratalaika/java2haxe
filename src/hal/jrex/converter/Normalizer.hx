@@ -5,6 +5,7 @@ import haxe.io.Input;
 import neko.vm.Module;
 import sys.FileSystem;
 import sys.io.File;
+using Lambda;
 
 /**
  * ...
@@ -24,18 +25,18 @@ class Normalizer
 	private var packs:StringMap<Array<Program>>;
 	private var cur:Program;
 	//private var types:StringMap<Definition>;
-	
+
 	private var definitionStack:Array<StringMap<ImportedDef>>;
-	
-	public function new() 
+
+	public function new()
 	{
 		this.modules = new StringMap();
 		this.packs = new StringMap();
 		//this.types = new StringMap();
-		
+
 		this.definitionStack = [new StringMap()];
 	}
-	
+
 	public function addModule(p:Program):Void
 	{
 		var path = p.pack.concat([p.name]);
@@ -46,28 +47,28 @@ class Normalizer
 			g = [];
 			packs.set(pack, g);
 		}
-		
+
 		g.push(p);
 		modules.set(path.join("."), p);
-		
+
 		if (pack == "java.lang")
 		{
 			//special definition stack
 			definitionStack[0].set(p.name, Module(p));
 		}
 	}
-	
+
 	public function allModules():Iterator<String>
 	{
 		return modules.keys();
 	}
-	
+
 	public function getNormalizedModule(path:String):Null<Program>
 	{
 		var m = modules.get(path);
 		if (m == null)
 			return null;
-		
+
 		//add all modules in same package level to the definition stack
 		var ds = new StringMap();
 		definitionStack.push(ds);
@@ -75,13 +76,13 @@ class Normalizer
 		{
 			ds.set(md.name, Module(md));
 		}
-		
+
 		{
 			ds = new StringMap();
 			definitionStack.push(ds);
 			//add imports
 			addImports(m, ds);
-			
+
 			{
 				ds = new StringMap();
 				definitionStack.push(ds);
@@ -92,7 +93,7 @@ class Normalizer
 						ds.set(getDef(d).name, Submodule(m, [], d));
 					addChildDefs(m, ds, d, []);
 				}
-				
+
 				//MAIN LOOP
 				{
 					var old = this.cur;
@@ -101,23 +102,25 @@ class Normalizer
 						normalize(d);
 					this.cur = old;
 				}
-				
+
 				//pop child modules
 				definitionStack.pop();
 			}
-			
+
 			//pop imports
 			definitionStack.pop();
 		}
-		
+
 		//pop package level modules
 		definitionStack.pop();
-		
+
 		return m;
 	}
-	
+
 	function normalizeField(f:ClassField)
 	{
+		if (f.kwds.has("private") || !(f.kwds.has('public') || f.kwds.has('protected')))
+			return;
 		if (f.types != null && f.types.length > 0)
 		{
 			var ds = new StringMap();
@@ -134,18 +137,20 @@ class Normalizer
 			if (f.varArgs != null)
 				normalizeType(f.varArgs.t);
 		}
-		
+
 		if (f.types != null && f.types.length > 0)
 		{
 			definitionStack.pop();
 		}
 	}
-	
+
 	function normalize(d:Definition)
 	{
 		switch(d)
 		{
 		case CDef(c):
+			if (c.kwds.has("private") || !(c.kwds.has('public') || c.kwds.has('protected')))
+				return;
 			//add another definitionStack for the type parameters
 			var ds = new StringMap();
 			definitionStack.push(ds);
@@ -153,42 +158,42 @@ class Normalizer
 			{
 				ds.set(tp.name, TypeParameter);
 			}
-			
+
 			{
 				//go through all fields' definition and normalizeType()
 				for (f in c.fields)
 				{
 					normalizeField(f);
 				}
-				
+
 				for (i in c.implement)
 					normalizeType(i);
 				for (e in c.extend)
 					normalizeType(e);
 			}
-			
+
 			definitionStack.pop();
 		case EDef(_): //no need of any normalization for haxe
 		}
-		
+
 	}
-	
+
 	function normalizeType(t:T)
 	{
 		if (untyped t.norm == true)
 			return;
-		
+
 		t.t = nt(t.t);
 		untyped t.norm = true;
 	}
-	
+
 	function nt(t:TPath):TPath
 	{
 		return switch(t)
 		{
 		case TArray(t):
 			TArray(nt(t));
-		case 
+		case
 		TPath(["int"], []),
 		TPath(["byte"], []),
 		TPath(["char"], []),
@@ -198,7 +203,7 @@ class Normalizer
 		TPath(["short"], []),
 		TPath(["boolean"], []),
 		TPath(["void"], []): t;
-		
+
 		case TPath(p, params):
 			//look for exact match
 			var m = modules.get(p.join("."));
@@ -231,7 +236,7 @@ class Normalizer
 								trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
 								return TPath(p, params.map(na));
 							}
-							
+
 							return mkTPath(m, d, innerStack, params);
 						case Submodule(m, innerClasses, def):
 							if (p.length > 1)
@@ -250,14 +255,14 @@ class Normalizer
 						}
 					}
 				}
-				
+
 				//if still not found, look for modules in order
 				var cp = "";
 				for (i in 0...p.length)
 				{
 					if (cp != "") cp += ".";
 					cp += p[i];
-					
+
 					var m = modules.get(cp);
 					if (m != null)
 					{
@@ -268,17 +273,17 @@ class Normalizer
 							trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
 							return TPath(p, params.map(na));
 						}
-						
+
 						return mkTPath(m, d, innerStack, params);
 					}
 				}
-				
+
 				trace("WARNING: Path " + p.join(".") + " not found");
 				return TPath(p, params.map(na));
 			}
 		}
 	}
-	
+
 	function mkTPath(root:Program, def:Definition, innerStack:Array<String>, params:Array<TArg>):TPath
 	{
 		var path = null;
@@ -291,10 +296,10 @@ class Normalizer
 			path = root.pack.copy();
 			path.push(root.name);
 		}
-		
+
 		if (innerStack != null && innerStack.length > 0)
 			path.push([root.name].concat(innerStack).join("_"));
-		
+
 		switch(def)
 		{
 		case CDef(c):
@@ -304,10 +309,10 @@ class Normalizer
 			}
 		default:
 		}
-		
+
 		return TPath(path, params);
 	}
-	
+
 	function na(a:TArg)
 	{
 		return switch(a)
@@ -317,7 +322,7 @@ class Normalizer
 		default: a; //wildcards == Dynamic in Haxe
 		}
 	}
-	
+
 	function addImports(m:Program, ds:StringMap<ImportedDef>)
 	{
 		//add imports
@@ -336,7 +341,7 @@ class Normalizer
 						trace("WARNING: No package ' " + i.path.join(".") + " ' found");
 						continue;
 					}
-					
+
 					for (md in pack)
 					{
 						ds.set(md.name, Module(md));
@@ -359,7 +364,7 @@ class Normalizer
 							trace("WARNING: couldn't find any fitting module for import " + i.path.join("."));
 							continue;
 						}
-						
+
 						diffpath.reverse();
 						var def = getDefinitionFromModule(m, diffpath);
 						if (def == null)
@@ -367,7 +372,7 @@ class Normalizer
 							trace("WARNING: couldn't find any fitting definition for import " + i.path.join(".") + " and module " + m.pack.join(".") + "." + m.name);
 							continue;
 						}
-						
+
 						ds.set(getDef(def).name, Submodule(m, diffpath, def));
 					} else {
 						ds.set(m.name, Module(m));
@@ -376,7 +381,7 @@ class Normalizer
 			}
 		}
 	}
-	
+
 	private function addChildDefs(module:Program, ds:StringMap<ImportedDef>, def:Definition, innerStack:Array<String>)
 	{
 		var d = getDef(def);
@@ -384,18 +389,18 @@ class Normalizer
 		{
 			ds.set(d.name, Submodule(module, innerStack, def));
 		}
-		
+
 		innerStack.push(d.name);
 		for (c in d.childDefs)
 			addChildDefs(module, ds, c, innerStack);
 		innerStack.pop();
 	}
-	
+
 	static function getDefinitionFromModule(m:Program, path:Array<String>):Null<Definition>
 	{
 		var cur = m.defs;
 		if (path.length == 0) return cur[0];
-		
+
 		var i = 0;
 		for (p in path)
 		{
@@ -415,13 +420,13 @@ class Normalizer
 			}
 			if (!found) return null;
 		}
-		
+
 		trace(m);
 		trace(m.name);
 		trace(path);
 		throw "assert";
 	}
-	
+
 	static function getDef(d:Definition):{ name:String, childDefs:Array<Definition> }
 	{
 		return switch(d)
