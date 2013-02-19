@@ -1,7 +1,7 @@
 package ;
 
+import hal.jrex.converter.Normalizer;
 import hal.jrex.Parser;
-import hal.jrex.Typeload;
 import hal.jrex.converter.HaxeExtern;
 import haxe.io.BytesOutput;
 import haxe.io.Path;
@@ -19,9 +19,10 @@ class Main
 {
 	static function main()
 	{
+		
 		//var p = new Parser().parseString(Test1.x, "file.java");
 		//var p = new Parser().parseString('package java.lang; public class Test { public String toString(); }', "file.java");
-		var path = "../example/classes/java";
+		var path = "../example/classes";
 		//var path = "../example/classes/java/awt/font";
 		
 		recurse(path);
@@ -29,6 +30,7 @@ class Main
 	
 	static function recurse(path)
 	{
+		trace(path);
 		for (file in FileSystem.readDirectory(path))
 		{
 			var fpath = path + "/" + file;

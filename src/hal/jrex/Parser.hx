@@ -321,21 +321,21 @@ class Parser {
 			switch( id ) {
 			case "public", "protected", "private", "abstract", "static", "strictfp", "final": kwds.push(id);
 			case "class":
-				var ret = CDef(parseClass(kwds, meta, min, comments));
+				var ret = CDef(parseClass(kwds, meta, min, comments, true));
 				end();
 				return ret;
 			case "_interface":
 				kwds.push("_interface");
-				var c = parseClass(kwds, meta, min, comments);
+				var c = parseClass(kwds, meta, min, comments, true);
 				c.isInterface = true;
 				return CDef(c);
 			case "interface":
-				var c = parseClass(kwds, meta, min, comments);
+				var c = parseClass(kwds, meta, min, comments, true);
 				end();
 				c.isInterface = true;
 				return CDef(c);
 			case "enum":
-				var e = parseEnum(kwds, meta, min, comments);
+				var e = parseEnum(kwds, meta, min, comments, true);
 				end();
 				return EDef(e);
 			default: unexpected(TId(id));
@@ -374,7 +374,7 @@ class Parser {
 		return ret;
 	}
 	
-	function parseEnum(kwds, meta, min, header) : EnumDef
+	function parseEnum(kwds, meta, min, header, isRoot) : EnumDef
 	{
 		var ename = id();
 		//var types = parseTypeParameters();
@@ -464,6 +464,7 @@ class Parser {
 			implement : impl,
 			
 			childDefs : fields.childDefs,
+			isRoot : isRoot,
 			constrs : constrs,
 			fields : fields.fields,
 			staticInit : fields.staticInit,
@@ -478,7 +479,7 @@ class Parser {
 		return { min : min, max : max, file:file };
 	}
 	
-	function parseClass(kwds:Array<String>,meta, min, header) : ClassDef {
+	function parseClass(kwds:Array<String>,meta, min, header, isRoot) : ClassDef {
 		var cname = id();
 		#if debug trace("parseClass(" + cname + ")"); #end
 		var types = parseTypeParameters();
@@ -529,6 +530,7 @@ class Parser {
 			name : cname,
 			types : types,
 			childDefs : fields.childDefs,
+			isRoot : isRoot,
 			fields : fields.fields,
 			implement : impl,
 			extend : extend,
@@ -577,7 +579,7 @@ class Parser {
 					switch( id ) {
 					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "final": kwds.push(id);
 					case "class", "interface", "_interface":
-						var c1 = parseClass(kwds, meta, min, lastComment);
+						var c1 = parseClass(kwds, meta, min, lastComment, false);
 						end();
 						var c = CDef(c1);
 						if (id == "interface")
@@ -586,7 +588,7 @@ class Parser {
 						childDefs.push(c);
 						break;
 					case "enum":
-						var e = EDef(parseEnum(kwds, meta, min, lastComment));
+						var e = EDef(parseEnum(kwds, meta, min, lastComment, false));
 						end();
 						lastComment = null;
 						childDefs.push(e);
@@ -1375,10 +1377,10 @@ class Parser {
 			}
 			mk(JSwitch(e, cl, def), 2);
 		case "class":
-			var cl = parseClass([], [], min, []);
+			var cl = parseClass([], [], min, [], false);
 			mk(JInnerDecl(CDef(cl)), min);
 		case "enum":
-			var e = parseEnum([], [], min, []);
+			var e = parseEnum([], [], min, [], false);
 			mk(JInnerDecl(EDef(e)), min);
 		case "synchronized":
 			ensure(TPOpen);

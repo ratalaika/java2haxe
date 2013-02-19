@@ -138,6 +138,7 @@ typedef EnumDef = {
 	var name : String;
 	var implement : Array<T>;
 	var childDefs : Array<Definition>;
+	var isRoot : Bool;
 	
 	var constrs : Array<EnumField>;
 	var fields : Array<ClassField>;
@@ -156,6 +157,7 @@ typedef ClassDef = {
 	var implement : Array<T>;
 	var extend : Array<T>;
 	var childDefs : Array<Definition>;
+	var isRoot : Bool;
 	
 	var fields : Array<ClassField>;
 	var staticInit : Expr;
