@@ -283,6 +283,17 @@ class Parser {
 		while( opt(TAt) ) {
 			var min = pos;
 			var name = id();
+			if (name == "interface")
+			{
+				add(TId("_interface"));
+				//add(TAt);
+				return ml;
+			}
+			
+			while (opt(TDot))
+			{
+				name += "." + id();
+			}
 			var args = null;
 			if ( opt(TPOpen) )
 			{
@@ -302,10 +313,8 @@ class Parser {
 			{
 				token();
 				ensure(TId("interface"));
-				kwds.push("_interface");
-				var c = parseClass(kwds, meta, min, comments);
-				c.isInterface = true;
-				return CDef(c);
+				
+				add(TId("_interface"));
 			}
 			
 			var id = id();
@@ -315,6 +324,11 @@ class Parser {
 				var ret = CDef(parseClass(kwds, meta, min, comments));
 				end();
 				return ret;
+			case "_interface":
+				kwds.push("_interface");
+				var c = parseClass(kwds, meta, min, comments);
+				c.isInterface = true;
+				return CDef(c);
 			case "interface":
 				var c = parseClass(kwds, meta, min, comments);
 				end();
@@ -407,6 +421,21 @@ class Parser {
 					}
 				}
 				
+				//TODO java.awt.font.NumericShaper
+				if (opt(TBrOpen))
+				{
+					var tbr = 1;
+					while (tbr > 0)
+					{
+						switch(token())
+						{
+							case TBrClose: tbr--;
+							case TBrOpen: tbr++;
+							default:
+						}
+					}
+				}
+				
 				constrs.push( {
 					name : id,
 					args : args,
@@ -449,7 +478,7 @@ class Parser {
 		return { min : min, max : max, file:file };
 	}
 	
-	function parseClass(kwds,meta, min, header) : ClassDef {
+	function parseClass(kwds:Array<String>,meta, min, header) : ClassDef {
 		var cname = id();
 		#if debug trace("parseClass(" + cname + ")"); #end
 		var types = parseTypeParameters();
@@ -472,7 +501,24 @@ class Parser {
 		}
 		ensure(TBrOpen);
 		
-		var fields = parseFields();
+		var fields = null;
+		if (kwds.has("_interface"))
+		{
+			//TODO
+			fields = { staticInit:null, instInit:null, fields:[], childDefs:[] };
+			var tbr = 1;
+			while (tbr > 0)
+			{
+				switch(token())
+				{
+				case TBrClose: tbr--;
+				case TBrOpen: tbr++;
+				default:
+				}
+			}
+		} else {
+			fields = parseFields();
+		}
 		
 		#if debug trace("parseClass("+cname+") finished"); #end
 		return {
@@ -509,6 +555,7 @@ class Parser {
 					t = token();
 				else
 					lastComments = [];
+				
 				switch( t ) {
 				case TBrOpen:
 					add(t);
@@ -523,12 +570,13 @@ class Parser {
 							throw "More than one instance init";
 						instInit = expr;
 					}
+					end();
 					
 					break;
 				case TId(id):
 					switch( id ) {
 					case "public", "static", "private", "protected", "abstract", "native", "synchronized", "transient", "volatile", "strictfp", "final": kwds.push(id);
-					case "class", "interface":
+					case "class", "interface", "_interface":
 						var c1 = parseClass(kwds, meta, min, lastComment);
 						end();
 						var c = CDef(c1);
@@ -616,6 +664,8 @@ class Parser {
 								pos : mkPos(min)
 							} );
 							
+							end();
+							
 							lastComment = null;
 						} else {
 							do
@@ -692,6 +742,12 @@ class Parser {
 					} else {
 						unexpected(t);
 					}
+				case TAt:
+					add(TAt);
+					if (meta != null)
+						meta = meta.concat(parseMetadata());
+					else
+						meta = parseMetadata();
 				default:
 					unexpected(t);
 					break;
@@ -1082,7 +1138,6 @@ class Parser {
 			//ensure(TPClose);
 			return parseExprNext(e);
 		case TBrOpen if (inValue): //array declaration
-			trace("HERE");
 			var decls = [];
 			while (!opt(TBrClose))
 			{
