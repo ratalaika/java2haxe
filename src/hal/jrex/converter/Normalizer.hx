@@ -347,7 +347,7 @@ class Normalizer
 					if (m == null)
 					{
 						//submodule is referenced
-						var p = i.path;
+						var p = i.path.copy();
 						var diffpath = [];
 						while (m == null && p.length > 0)
 						{

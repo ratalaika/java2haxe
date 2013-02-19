@@ -274,6 +274,7 @@ class Parser {
 				unexpected(tk);
 			}
 		}
+		//trace(a);
 		return { path:a, isStatic:isStatic };
 	}
 	
