@@ -17,15 +17,33 @@ import neko.Lib;
 
 class Main 
 {
+	static var norm:Normalizer = new Normalizer();
 	static function main()
 	{
 		
 		//var p = new Parser().parseString(Test1.x, "file.java");
 		//var p = new Parser().parseString('package java.lang; public class Test { public String toString(); }', "file.java");
-		var path = "../example/classes";
+		var path = "../example/classes/java";
 		//var path = "../example/classes/java/awt/font";
 		
 		recurse(path);
+		
+		for (m in norm.allModules())
+		{
+			trace(" ++++ " + m);
+			var m = norm.getNormalizedModule(m);
+			var cur = [];
+			for (p in m.pack)
+			{
+				cur.push(p);
+				if (!FileSystem.exists("out/" + cur.join("/")))
+					FileSystem.createDirectory("out/" + cur.join("/"));
+			}
+			var f = File.write("out/" + m.pack.join("/") + "/" + m.name + ".hx");
+			var e = new HaxeExtern(f);
+			e.convertModule(m);
+			f.close();
+		}
 	}
 	
 	static function recurse(path)
@@ -57,6 +75,8 @@ class Main
 			}
 			var p = new Parser(true).parse(r, fpath);
 			r.close();
+			
+			norm.addModule(p);
 			
 			//var out = File.write(Path.withoutExtension(file) + ".hx");
 			//var out = new BytesOutput();

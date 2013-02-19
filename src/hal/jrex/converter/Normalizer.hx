@@ -1,16 +1,8 @@
 package hal.jrex.converter;
 import hal.jrex.Java;
 import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
-import haxe.ds.StringMap;
 import haxe.io.Input;
+import neko.vm.Module;
 import sys.FileSystem;
 import sys.io.File;
 
@@ -24,13 +16,13 @@ enum ImportedDef
 	TypeParameter;
 	Module(p:Program);
 	Submodule(p:Program, innerClasses:Array<String>, def:Definition);
-	NotFound; //don't waste time looking for modules
 }
 
 class Normalizer
 {
 	private var modules:StringMap<Program>;
 	private var packs:StringMap<Array<Program>>;
+	private var cur:Program;
 	//private var types:StringMap<Definition>;
 	
 	private var definitionStack:Array<StringMap<ImportedDef>>;
@@ -103,8 +95,11 @@ class Normalizer
 				
 				//MAIN LOOP
 				{
+					var old = this.cur;
+					this.cur = m;
 					for (d in m.defs)
 						normalize(d);
+					this.cur = old;
 				}
 				
 				//pop child modules
@@ -121,9 +116,206 @@ class Normalizer
 		return m;
 	}
 	
+	function normalizeField(f:ClassField)
+	{
+		if (f.types != null && f.types.length > 0)
+		{
+			var ds = new StringMap();
+			definitionStack.push(ds);
+			for (t in f.types)
+				ds.set(t.name, TypeParameter);
+		}
+		switch(f.kind)
+		{
+		case FVar(t, _): normalizeType(t);
+		case FFun(f):
+			for (arg in f.args) normalizeType(arg.t);
+			normalizeType(f.ret);
+			if (f.varArgs != null)
+				normalizeType(f.varArgs.t);
+		}
+		
+		if (f.types != null && f.types.length > 0)
+		{
+			definitionStack.pop();
+		}
+	}
+	
 	function normalize(d:Definition)
 	{
+		switch(d)
+		{
+		case CDef(c):
+			//add another definitionStack for the type parameters
+			var ds = new StringMap();
+			definitionStack.push(ds);
+			for (tp in c.types)
+			{
+				ds.set(tp.name, TypeParameter);
+			}
+			
+			{
+				//go through all fields' definition and normalizeType()
+				for (f in c.fields)
+				{
+					normalizeField(f);
+				}
+				
+				for (i in c.implement)
+					normalizeType(i);
+				for (e in c.extend)
+					normalizeType(e);
+			}
+			
+			definitionStack.pop();
+		case EDef(_): //no need of any normalization for haxe
+		}
 		
+	}
+	
+	function normalizeType(t:T)
+	{
+		if (untyped t.norm == true)
+			return;
+		
+		t.t = nt(t.t);
+		untyped t.norm = true;
+	}
+	
+	function nt(t:TPath):TPath
+	{
+		return switch(t)
+		{
+		case TArray(t):
+			TArray(nt(t));
+		case 
+		TPath(["int"], []),
+		TPath(["byte"], []),
+		TPath(["char"], []),
+		TPath(["double"], []),
+		TPath(["float"], []),
+		TPath(["long"], []),
+		TPath(["short"], []),
+		TPath(["boolean"], []),
+		TPath(["void"], []): t;
+		
+		case TPath(p, params):
+			//look for exact match
+			var m = modules.get(p.join("."));
+			if (m != null)
+			{
+				for (d in m.defs)
+				{
+					if (getDef(d).name == p[p.length - 1])
+						return mkTPath(m, d, null, params);
+				}
+				throw "assert " + p + ", " + params + " , \n" + m;
+			} else {
+				//look in stack for matches
+				for (i in 1...(definitionStack.length+1))
+				{
+					var def = definitionStack[definitionStack.length - i];
+					var imp = def.get(p[0]);
+					if (imp != null)
+					{
+						switch(imp)
+						{
+						case TypeParameter:
+							if (p.length > 1 || params.length != 0) throw "assert";
+							return TPath(p, params);
+						case Module(m):
+							var innerStack = p.slice(1);
+							var d = getDefinitionFromModule(m, innerStack);
+							if (d == null)
+							{
+								trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
+								return TPath(p, params.map(na));
+							}
+							
+							return mkTPath(m, d, innerStack, params);
+						case Submodule(m, innerClasses, def):
+							if (p.length > 1)
+							{
+								var innerStack = innerClasses.concat(p.slice(1));
+								var d = getDefinitionFromModule(m, innerStack);
+								if (d == null)
+								{
+									trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found for stack " + innerStack.join('.'));
+									return TPath(p, params.map(na));
+								}
+								return mkTPath(m, d, innerStack, params);
+							} else {
+								return mkTPath(m, def, innerClasses, params);
+							}
+						}
+					}
+				}
+				
+				//if still not found, look for modules in order
+				var cp = "";
+				for (i in 0...p.length)
+				{
+					if (cp != "") cp += ".";
+					cp += p[i];
+					
+					var m = modules.get(cp);
+					if (m != null)
+					{
+						var innerStack = p.slice(i);
+						var d = getDefinitionFromModule(m, innerStack);
+						if (d == null)
+						{
+							trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
+							return TPath(p, params.map(na));
+						}
+						
+						return mkTPath(m, d, innerStack, params);
+					}
+				}
+				
+				trace("WARNING: Path " + p.join(".") + " not found");
+				return TPath(p, params.map(na));
+			}
+		}
+	}
+	
+	function mkTPath(root:Program, def:Definition, innerStack:Array<String>, params:Array<TArg>):TPath
+	{
+		var path = null;
+		if (root == this.cur)
+		{
+			path = [];
+			if (innerStack == null || innerStack.length == 0)
+				path.push(root.name);
+		} else {
+			path = root.pack.copy();
+			path.push(root.name);
+		}
+		
+		if (innerStack != null && innerStack.length > 0)
+			path.push([root.name].concat(innerStack).join("_"));
+		
+		switch(def)
+		{
+		case CDef(c):
+			if (params == null || params.length == 0 && c.types.length > 0)
+			{
+				params = c.types.map(function(gd) return AWildcard);
+			}
+		default:
+		}
+		
+		return TPath(path, params);
+	}
+	
+	function na(a:TArg)
+	{
+		return switch(a)
+		{
+		case AType(t):
+			AType({ t : nt(t.t), final: t.final });
+		default: a; //wildcards == Dynamic in Haxe
+		}
 	}
 	
 	function addImports(m:Program, ds:StringMap<ImportedDef>)
