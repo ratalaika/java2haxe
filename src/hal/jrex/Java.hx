@@ -170,7 +170,7 @@ enum Definition {
 
 typedef Program = {
 	var pack : Array<String>;
-	var imports : Array<Array<String>>;
+	var imports : Array<{ path:Array<String>, isStatic:Bool }>;
 	var name : String;
 	var def : Definition;
 }

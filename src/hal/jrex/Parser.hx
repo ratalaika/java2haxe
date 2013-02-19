@@ -243,7 +243,9 @@ class Parser {
 	
 	function parseImport() {
 		#if debug trace("parseImport()"); #end
+		var isStatic = opt(TId("static"));
 		var a = [id()];
+		
 		while( true ) {
 			var tk = token();
 			switch( tk ) {
@@ -265,7 +267,7 @@ class Parser {
 				unexpected(tk);
 			}
 		}
-		return a;
+		return { path:a, isStatic:isStatic };
 	}
 	
 	function parseMetadata(?pinfo:PosInfos) {
@@ -523,10 +525,12 @@ class Parser {
 							c1.isInterface = true;
 						lastComment = null;
 						childDefs.push(c);
+						break;
 					case "enum":
 						var e = EDef(parseEnum(kwds, meta, min, lastComment));
 						lastComment = null;
 						childDefs.push(e);
+						break;
 					default:
 						add(t);
 						//first parse type
@@ -1573,7 +1577,7 @@ class Parser {
 						char = nextChar();
 					}
 					
-					if ( char == 'f'.code )
+					if ( char == 'f'.code || char == 'F'.code )
 					{
 						this.char = 0;
 						return TConst(CSingle(buf.toString()));
@@ -1587,7 +1591,7 @@ class Parser {
 					} while ( char >= '0'.code && char <= '9'.code );
 					
 					var isSingle = false;
-					if (char == 'f'.code)
+					if (char == 'f'.code || char == 'F'.code)
 						isSingle = true;
 					else
 						this.char = char;
