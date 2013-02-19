@@ -19,7 +19,7 @@ class Main
 #if !display
 		//var p = new Parser().parseString(Test1.x, "file.java");
 		//var p = new Parser().parseString('package java.lang; public class Test { public String toString(); }', "file.java");
-		var p = new Parser().parse(File.read('../example/classes/java/lang/Character.java', false), 'Object.java');
+		var p = new Parser(true).parse(File.read('../example/classes/java/lang/Character.java', false), 'Object.java');
 		
 		var out = File.write('Test.hx');
 		var he = new HaxeExtern(out);

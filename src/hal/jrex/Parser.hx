@@ -72,6 +72,8 @@ class Parser {
 	public var opPriority : StringMap<Int>;
 	public var unopsPrefix : Array<String>;
 	public var unopsSuffix : Array<String>;
+	
+	var onlyDefinitions : Bool;
 
 	// implementation
 	var file : String;
@@ -86,7 +88,8 @@ class Parser {
 	
 	var pos:Int;
 
-	public function new() {
+	public function new(onlyDefinitions = false) {
+		this.onlyDefinitions = onlyDefinitions;
 		lastComments = [];
 		line = 1;
 		watchingComments = true;
@@ -991,6 +994,22 @@ class Parser {
 	}
 
 	function parseExpr(inValue:Bool, funcStart:Bool = false, namedExpr:String = null):Expr {
+		if (onlyDefinitions && funcStart)
+		{
+			var indent = 0;
+			do
+			{
+				switch(token())
+				{
+					case TBrOpen: indent++;
+					case TBrClose: indent--;
+					default:
+				}
+			} while (indent > 0);
+			
+			return null;
+		}
+		
 		var min = pos;
 		var tk = token();
 		#if debug trace("parseExpr("+tk+")"); #end
