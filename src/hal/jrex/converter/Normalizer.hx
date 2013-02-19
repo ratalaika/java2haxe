@@ -400,6 +400,9 @@ class Normalizer
 	{
 		var cur = m.defs;
 		if (path.length == 0) return cur[0];
+		for (p in cur)
+			if (getDef(p).name == m.name && path[0] != m.name)
+				cur = getDef(p).childDefs;
 
 		var i = 0;
 		for (p in path)

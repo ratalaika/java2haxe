@@ -108,6 +108,7 @@ class HaxeExtern
 		{
 			//don't compile private or internal
 			if (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public")))
+				continue;
 
 			if (f.comments != null)
 			{
