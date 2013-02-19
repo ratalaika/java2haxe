@@ -84,7 +84,7 @@ class HaxeExtern
 			w('<' + c.types.map(function(g) return g.name).join(", ") + '>');
 		
 		c.extend = c.extend.filter(function(v) switch(v.t) {
-			case TPath(p, params): if (p[0] == "java" && p[1] == "lang" && p[2] == "object") return false; return true;
+			case TPath(p, _): if (p[0] == "java" && p[1] == "lang" && p[2] == "object") return false; return true;
 			default: return true;
 		}).array();
 		

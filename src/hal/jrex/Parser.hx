@@ -283,7 +283,7 @@ class Parser {
 					default:
 						unexpected(peek());
 					}
-					var e = parseExpr();
+					var e = parseExpr(true);
 					args.push( { name : n, val :e } );
 					opt(TComma);
 				}
@@ -386,7 +386,7 @@ class Parser {
 				{
 					args = [];
 					while( !opt(TPClose) ) {
-						var e = parseExpr();
+						var e = parseExpr(true);
 						args.push( e );
 						opt(TComma);
 					}
@@ -497,7 +497,7 @@ class Parser {
 				switch( t ) {
 				case TBrOpen:
 					add(t);
-					var expr = parseExpr(true);
+					var expr = parseExpr(false, true);
 					if (kwds.has("static"))
 					{
 						if (staticInit != null) 
@@ -564,7 +564,7 @@ class Parser {
 							if (opt(TBrOpen))
 							{
 								add(TBrOpen);
-								expr = parseExpr(true);
+								expr = parseExpr(false, true);
 							} else {
 								end();
 							}
@@ -601,7 +601,7 @@ class Parser {
 							}
 								
 							if (opt(TOp("=")))
-								val = parseExpr();
+								val = parseExpr(true);
 							
 							
 							var lt = lastTypes;
@@ -671,9 +671,13 @@ class Parser {
 				tk = token();
 				switch(tk) {
 				case TId(id): a.push(id);
+				case TDot: //... for varArgs
+					add(tk);
+					add(tk);
+					break;
 				default: unexpected(tk);
 				}
-			case TComment(s,b):
+			case TComment(_,_):
 			default:
 				add(tk);
 				break;
@@ -826,7 +830,7 @@ class Parser {
 			
 			if (parseParen)
 			{
-				var e = parseExpr();
+				var e = parseExpr(true);
 				ensure(TPClose);
 				
 				#if debug trace("\t Is parenthesis "); #end
@@ -874,7 +878,10 @@ class Parser {
 						switch(op)
 						{
 						case "<": genDecl++;
+						case "<<": genDecl += 2;
 						case ">": if (genDecl-- < 0) return rollback(true);
+						case ">>": if ((genDecl -= 2) < 0) return rollback(true);
+						case ">>>": if ((genDecl -= 3) < 0) return rollback(true);
 						default: return rollback(true);
 						}
 					
@@ -896,7 +903,7 @@ class Parser {
 		var t = parseType();
 		ensure(TPClose);
 		
-		var exp = parseExpr();
+		var exp = parseExpr(true);
 		
 		function addExpr(to:Expr)
 		{
@@ -945,9 +952,12 @@ class Parser {
 				toRollback.push(tk);
 				switch(tk)
 				{
-					case TId("return"):
-						return rollback();
 					case TId(s):
+						switch(s)
+						{
+							case "return", "assert", "instanceof", "break", "continue", "throw", "if", "super", "native":
+								return rollback();
+						}
 						if (inArrDecl) return rollback();
 						if (hadId && genDecl == 0)
 						{
@@ -964,6 +974,7 @@ class Parser {
 						switch(op)
 						{
 						case "<": genDecl++;
+						case "<<": genDecl += 2;
 						case ">>": if ( (genDecl -= 2) < 0) return rollback();
 						case ">>>": if ( (genDecl -= 3) < 0) return rollback();
 						case ">": if (genDecl-- < 0) return rollback();
@@ -988,19 +999,29 @@ class Parser {
 		#if debug trace("\t Is var declaration "); #end
 		var vars = [];
 		
+		var t = parseType();
+		var first = true;
 		while (true)
 		{
-			var t = parseType();
 			var name = id();
 			var e = null;
+			
+			while (first && opt(TBkOpen))
+			{
+				ensure(TBkClose);
+				t.t = TArray(t.t);
+			}
+			
 			if (opt(TOp("=")))
 			{
-				e = parseExpr();
+				e = parseExpr(true);
 			}
 			
 			vars.push( { name : name, t : t, val : e } );
 			if (!opt(TComma))
 				break;
+			
+			first = false;
 		}
 		
 		#if debug trace("\t->Vars " + vars); #end
@@ -1020,7 +1041,7 @@ class Parser {
 		case TId(id):
 			if (opt(TDoubleDot))
 			{
-				return parseExpr(false, id);
+				return parseExpr(false, false, id);
 			} else {
 				add(tk);
 			}
@@ -1031,13 +1052,13 @@ class Parser {
 		
 		var e = parseVarDecl();
 		if (e == null)
-			e = parseExpr();
+			e = parseExpr(false);
 		
 		watchingComments = lst;
 		return e;
 	}
 
-	function parseExpr(funcStart:Bool = false, namedExpr:String = null):Expr {
+	function parseExpr(inValue:Bool, funcStart:Bool = false, namedExpr:String = null):Expr {
 		var min = pos;
 		var tk = token();
 		#if debug trace("parseExpr("+tk+")"); #end
@@ -1056,6 +1077,16 @@ class Parser {
 			//var e = parseExpr();
 			//ensure(TPClose);
 			return parseExprNext(e);
+		case TBrOpen if (inValue): //array declaration
+			trace("HERE");
+			var decls = [];
+			while (!opt(TBrClose))
+			{
+				decls.push(parseExpr(true));
+				opt(TComma);
+			}
+			
+			return mk(JArrayDecl(null, null, decls), min);
 		case TBrOpen:
 			#if debug trace("parseExpr: "); #end
 			var a = new Array();
@@ -1069,7 +1100,7 @@ class Parser {
 			var found;
 			for( x in unopsPrefix )
 				if( x == op )
-					return makeUnop(op, parseExpr(), min);
+					return makeUnop(op, parseExpr(true), min);
 			return unexpected(tk);
 		case TComment(s,b):
 			return mk(JComment(s,b), min);
@@ -1108,19 +1139,19 @@ class Parser {
 		return switch( kwd ) {
 		case "if":
 			ensure(TPOpen);
-			var cond = parseExpr();
+			var cond = parseExpr(true);
 			ensure(TPClose);
-			var e1 = parseExpr();
+			var e1 = parseExpr(false);
 			end();
-			var e2 = if( opt(TId("else"), true) ) parseExpr() else null;
+			var e2 = if( opt(TId("else"), true) ) parseExpr(false) else null;
 			mk(JIf(cond,e1,e2), min);
 		case "final":
 			throw "assert";
 		case "while":
 			ensure(TPOpen);
-			var econd = parseExpr();
+			var econd = parseExpr(true);
 			ensure(TPClose);
-			var e = parseExpr();
+			var e = parseExpr(false);
 			mk(JWhile(econd,e, false, namedExpr), min);
 		case "for":
 			var isEnhanced = false;
@@ -1159,15 +1190,15 @@ class Parser {
 				var varName = id();
 				ensure(TDoubleDot);
 				
-				var ex = parseExpr();
+				var ex = parseExpr(true);
 				
 				ensure(TPClose);
-				mk(JForEach(t, varName, ex, parseExpr(), namedExpr), min);
+				mk(JForEach(t, varName, ex, parseExpr(false), namedExpr), min);
 			} else {
 				var inits = parseExprList(TSemicolon, true);
 				var conds = parseExprList(TSemicolon);
 				var incrs = parseExprList(TPClose);
-				mk(JFor(inits, conds, incrs, parseExpr(), namedExpr), min);
+				mk(JFor(inits, conds, incrs, parseExpr(false), namedExpr), min);
 			}
 		case "break":
 			var label = switch( peek() ) {
@@ -1183,15 +1214,15 @@ class Parser {
 			mk(JContinue(label), min);
 		case "else": unexpected(TId(kwd));
 		case "assert":
-			var e1 = parseExpr();
+			var e1 = parseExpr(true);
 			var e2 = null;
 			if (opt(TDoubleDot))
 			{
-				e2 = parseExpr();
+				e2 = parseExpr(true);
 			}
 			mk(JAssert(e1, e2), min);
 		case "return":
-			mk(JReturn(if( peek() == TSemicolon ) null else parseExpr()), min);
+			mk(JReturn(if( peek() == TSemicolon ) null else parseExpr(true)), min);
 		case "new":
 				var t = parseType(false);
 				
@@ -1208,7 +1239,7 @@ class Parser {
 						{
 							lens.push(null);
 						} else {
-							lens.push(parseExpr());
+							lens.push(parseExpr(true));
 							ensure(TBkClose);
 							
 							hasLengthDef = true;
@@ -1226,7 +1257,8 @@ class Parser {
 						decls = [];
 						while (!opt(TBrClose))
 						{
-							decls.push(parseExpr());
+							decls.push(parseExpr(true));
+							opt(TComma);
 						}
 						mk(JArrayDecl(t, lens, decls), min);
 					}
@@ -1243,9 +1275,9 @@ class Parser {
 					}
 				}
 		case "throw":
-			mk(JThrow( parseExpr() ), min);
+			mk(JThrow( parseExpr(true) ), min);
 		case "try":
-			var e = parseExpr();
+			var e = parseExpr(false);
 			var catches = new Array();
 			while( opt(TId("catch")) ) {
 				ensure(TPOpen);
@@ -1253,20 +1285,20 @@ class Parser {
 				var name = id();
 				
 				ensure(TPClose);
-				var e = parseExpr();
+				var e = parseExpr(false);
 				catches.push( { name : name, t : t, e : e } );
 			}
 			
 			var finally = null;
 			if ( opt(TId("finally")) )
 			{
-				finally = parseExpr();
+				finally = parseExpr(false);
 			}
 			
 			mk(JTry(e, catches, finally), min);
 		case "switch":
 			ensure(TPOpen);
-			var e = mk(JParent(parseExpr()), min);
+			var e = mk(JParent(parseExpr(true)), min);
 			ensure(TPClose);
 			var def = null, cl = [];
 			ensure(TBrOpen);
@@ -1276,7 +1308,7 @@ class Parser {
 					def = parseCaseBlock();
 				} else {
 					ensure(TId("case"));
-					var val = parseExpr();
+					var val = parseExpr(true);
 					ensure(TDoubleDot);
 					var el = parseCaseBlock();
 					cl.push( { val : val, el : el } );
@@ -1291,7 +1323,7 @@ class Parser {
 			mk(JInnerDecl(EDef(e)), min);
 		case "synchronized":
 			ensure(TPOpen);
-			var lock = parseExpr();
+			var lock = parseExpr(false);
 			ensure(TPClose);
 			ensure(TBrOpen);
 			
@@ -1304,9 +1336,9 @@ class Parser {
 			
 			mk(JSynchronized(lock, block), min);
 		case "do":
-			var e = parseExpr();
+			var e = parseExpr(false);
 			ensure(TId("while"));
-			var cond = parseExpr();
+			var cond = parseExpr(true);
 			mk(JWhile(cond, e, true, namedExpr), min);
 		default:
 			null;
@@ -1323,7 +1355,7 @@ class Parser {
 			case TBrClose: break;
 			default:
 			}
-			el.push(parseExpr());
+			el.push(parseExpr(false));
 			end();
 		}
 		return el;
@@ -1343,7 +1375,7 @@ class Parser {
 					}
 					return parseExprNext(mk(JUnop(op,false,e1), min));
 				}
-			return makeBinop(op,e1,parseExpr(), min);
+			return makeBinop(op,e1,parseExpr(true), min);
 		case TDot:
 			tk = token();
 			var field = null;
@@ -1356,15 +1388,15 @@ class Parser {
 		case TPOpen: //FIXME must implement read params for call
 			return parseExprNext(mk(JCall(e1,[],parseExprList(TPClose)), min));
 		case TBkOpen:
-			var e2 = parseExpr();
+			var e2 = parseExpr(true);
 			tk = token();
 			if( tk != TBkClose ) unexpected(tk);
 			return parseExprNext(mk(JArray(e1,e2), min));
 		case TQuestion:
-			var e2 = parseExpr();
+			var e2 = parseExpr(true);
 			tk = token();
 			if( tk != TDoubleDot ) unexpected(tk);
-			var e3 = parseExpr();
+			var e3 = parseExpr(true);
 			return mk(JTernary(e1, e2, e3), min);
 		case TId(s):
 			switch( s ) {
@@ -1388,7 +1420,7 @@ class Parser {
 			if( opt(etk) )
 				return args;
 			while( true ) {
-				args.push(full ? parseFullExpr() : parseExpr());
+				args.push(full ? parseFullExpr() : parseExpr(false));
 				var tk = token();
 				if (tk == etk) break;
 				
@@ -1558,7 +1590,7 @@ class Parser {
 					char = nextChar();
 				}
 				switch( char ) {
-				case 'x'.code:
+				case 'x'.code, 'X'.code:
 					if( buf.toString() == "0" ) {
 						do {
 							buf.addChar(char);
