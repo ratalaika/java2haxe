@@ -815,128 +815,43 @@ class Parser {
 	function parseCastOrParen() : Expr
 	{
 		#if debug trace("parseCast()"); #end
+		var min = this.pos;
 		
-		var min = pos;
-		var toRollback = [];
-		
-		function rollback(parseParen:Bool=false)
+		if (isTypeDefinition())
 		{
-			#if debug trace("\t Rolling back: " + toRollback); #end
-			var len = toRollback.length;
-			for (i in 0...len)
-			{
-				add(toRollback[len - i - 1]);
-			}
+			#if debug trace("\t Is cast "); #end
+			//is cast
+			var t = parseType();
+			ensure(TPClose);
 			
-			if (parseParen)
-			{
-				var e = parseExpr(true);
-				ensure(TPClose);
-				
-				#if debug trace("\t Is parenthesis "); #end
-				return mk(JParent(e), min);
-			} else {
-				return null;
-			}
-		}
-		
-		if (opt(TId("final")))
-		{
-			toRollback.push(TId("final"));
-		} else {
-			var inArrDecl = false;
-			var genDecl = 0;
-			var hadId = false;
-			var idMin = 0;
+			var exp = parseExpr(true);
 			
-			while (true)
+			function addExpr(to:Expr)
 			{
-				idMin = pos;
-				var tk = token();
-				toRollback.push(tk);
-				switch(tk)
+				switch(to.expr)
 				{
-					case TId(s):
-						if (inArrDecl) return rollback(true);
-						if (hadId && genDecl == 0)
-						{
-							return rollback(true);
-						} else {
-							hadId = true;
-						}
-					case TDot:
-						if (!hadId) return rollback(true);
-						hadId = false;
-					case TPClose:
-						if (hadId && genDecl == 0 && !inArrDecl)
-						{
-							break; //is cast
-						} else {
-							return rollback(true);
-						}
-					case TOp(op):
-						switch(op)
-						{
-						case "<": genDecl++;
-						case "<<": genDecl += 2;
-						case ">": if (genDecl-- < 0) return rollback(true);
-						case ">>": if ((genDecl -= 2) < 0) return rollback(true);
-						case ">>>": if ((genDecl -= 3) < 0) return rollback(true);
-						default: return rollback(true);
-						}
-					
-					case TBkOpen:
-						if (inArrDecl) return rollback(true);
-						inArrDecl = true;
-					case TBkClose:
-						if (!inArrDecl) return rollback(true);
-						inArrDecl = false;
-					default:
-						return rollback(true);
+				case JBinop(op, e1, e2):
+					return mk(JBinop(op,addExpr(e1),e2), to.pos.min, to.pos.max);
+				default:
+					return mk(JCast(t, to), min, to.pos.max);
 				}
 			}
+			
+			return addExpr(exp);
+		} else {
+			#if debug trace("\t Is parenthesis "); #end
+			var e = parseExpr(true);
+			ensure(TPClose);
+			
+			return mk(JParent(e), min);
 		}
-		
-		rollback();
-		#if debug trace("\t Is cast "); #end
-		//is cast
-		var t = parseType();
-		ensure(TPClose);
-		
-		var exp = parseExpr(true);
-		
-		function addExpr(to:Expr)
-		{
-			switch(to.expr)
-			{
-			case JBinop(op, e1, e2):
-				return mk(JBinop(op,addExpr(e1),e2), to.pos.min, to.pos.max);
-			default:
-				return mk(JCast(t, to), min, to.pos.max);
-			}
-		}
-		
-		return addExpr(exp);
 	}
 	
-	function parseVarDecl() : Null<Expr>
+	function isTypeDefinition():Bool
 	{
-		#if debug trace("parseVarDecl()"); #end
-		var min = pos;
+		#if debug trace("isTypeDefinition()"); #end
 		var toRollback = [];
 		
-		function rollback()
-		{
-			#if debug trace("\t Rolling back: " + toRollback); #end
-			var len = toRollback.length;
-			for (i in 0...len)
-			{
-				add(toRollback[len - i - 1]);
-			}
-			return null;
-		}
-		
-		var inArrDecl = false;
 		var genDecl = 0;
 		var hadId = false;
 		var idMin = 0;
@@ -956,9 +871,10 @@ class Parser {
 						switch(s)
 						{
 							case "return", "assert", "instanceof", "break", "continue", "throw", "if", "super", "native":
-								return rollback();
+								while (toRollback.length > 0) add(toRollback.pop());
+								return false;
 						}
-						if (inArrDecl) return rollback();
+						
 						if (hadId && genDecl == 0)
 						{
 							//is var declaration
@@ -967,7 +883,10 @@ class Parser {
 							hadId = true;
 						}
 					case TDot:
-						if (!hadId) return rollback();
+						if (!hadId) {
+							while (toRollback.length > 0) add(toRollback.pop());
+							return false;
+						}
 						
 						hadId = false;
 					case TOp(op):
@@ -975,27 +894,40 @@ class Parser {
 						{
 						case "<": genDecl++;
 						case "<<": genDecl += 2;
-						case ">>": if ( (genDecl -= 2) < 0) return rollback();
-						case ">>>": if ( (genDecl -= 3) < 0) return rollback();
-						case ">": if (genDecl-- < 0) return rollback();
-						default: return rollback();
+						case ">>": if ( (genDecl -= 2) < 0) {while (toRollback.length > 0) add(toRollback.pop()); return false;}
+						case ">>>": if ( (genDecl -= 3) < 0) {while (toRollback.length > 0) add(toRollback.pop()); return false;}
+						case ">": if (genDecl-- < 0) {while (toRollback.length > 0) add(toRollback.pop()); return false;}
+						default: while (toRollback.length > 0) add(toRollback.pop()); return false;
 						}
+					case TComma if (genDecl == 0): break;
 					case TComma, TQuestion if (genDecl > 0):
-						
+					case TPClose if (genDecl == 0): break;
 					case TBkOpen:
-						if (inArrDecl) return rollback();
-						inArrDecl = true;
-					case TBkClose:
-						if (!inArrDecl) return rollback();
-						inArrDecl = false;
+						if (peek() != TBkClose)
+						{ 
+							while (toRollback.length > 0) add(toRollback.pop()); return false; 
+						} else {
+							toRollback.push(token());
+						}
 					default:
-						return rollback();
+						while (toRollback.length > 0) add(toRollback.pop()); return false;
 				}
 			}
 		}
 		
+		#if debug trace("\t -> is type definition"); #end
+		while (toRollback.length > 0) add(toRollback.pop());
+		return true;
+	}
+	
+	function parseVarDecl() : Null<Expr>
+	{
+		#if debug trace("parseVarDecl()"); #end
+		var min = pos;
 		
-		rollback();
+		if (!isTypeDefinition())
+			return null;
+		
 		#if debug trace("\t Is var declaration "); #end
 		var vars = [];
 		
@@ -1073,6 +1005,7 @@ class Parser {
 		case TConst(c):
 			return parseExprNext(mk(JConst(c), min));
 		case TPOpen:
+			
 			var e = parseCastOrParen();
 			//var e = parseExpr();
 			//ensure(TPClose);
