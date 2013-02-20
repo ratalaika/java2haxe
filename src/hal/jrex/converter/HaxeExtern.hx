@@ -65,17 +65,38 @@ class HaxeExtern
 		out.writeString(s);
 	}
 
+	private function isHxKeyword(s:String):Bool
+	{
+		switch(s)
+		{
+			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var":
+				true
+			default: false
+		}
+	}
+
 	private function convertClass(c:ClassDef, defStack:Array<String>)
 	{
 		//don't compile private or internal
 		if (c.kwds.has("private") || (!c.kwds.has("protected") && !c.kwds.has("public")))
 			return;
 
+		var require = null;
 		if (c.comments != null)
 		{
 			for (c in c.comments)
-				expr(c);
+			{
+				switch(c.expr)
+				{
+				case JComment(c, true) if (sereg.match(c)):
+					var since = sereg.matched(1);
+					require = "@:require(java" +(since.substr(0,1)) + ") ";
+				default:
+				}
+			}
+			for (c in c.comments) expr(c);
 		}
+		if (require != null) w(require);
 
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "') ");
@@ -141,7 +162,12 @@ class HaxeExtern
 
 				if (f.name.charCodeAt(0) == '%'.code)
 				{
-					w("@:native(" + f.name.substr(1) + ") ");
+					w("@:native('" + f.name.substr(1) + "') ");
+				} else if (isHxKeyword(f.name)) {
+					if (!isStatic)
+						w("//");
+					else
+						w("@:native('" + f.name + "') ");
 				}
 				for (k in f.kwds)
 					w("@:" + k +" ");
@@ -160,7 +186,12 @@ class HaxeExtern
 				if (require != null) w(require);
 				if (f.name.charCodeAt(0) == '%'.code)
 				{
-					w("@:native(" + f.name.substr(1) + ") ");
+					w("@:native('" + f.name.substr(1) + "') ");
+				} else if (isHxKeyword(f.name)) {
+					if (!isStatic)
+						w("//");
+					else
+						w("@:native('" + f.name + "') ");
 				}
 
 				w("@:overload "); //necessary
@@ -271,6 +302,10 @@ class HaxeExtern
 
 	private function id(s:String):String
 	{
+		if (isHxKeyword(s))
+		{
+			return "_" + s;
+		}
 		//TODO include haxe keywords
 		return StringTools.replace(s, "%", "_");
 	}
@@ -286,11 +321,22 @@ class HaxeExtern
 	{
 		if (e.kwds.has('private') || !(e.kwds.has('protected') || e.kwds.has('public')))
 			return;
-		if (e.comments != null) {
+		var require = null;
+		if (e.comments != null)
+		{
 			for (c in e.comments)
-				expr(c);
-			//w("\n");
+			{
+				switch(c.expr)
+				{
+				case JComment(c, true) if (sereg.match(c)):
+					var since = sereg.matched(1);
+					require = "@:require(java" +(since.substr(0,1)) + ") ";
+				default:
+				}
+			}
+			for (c in e.comments) expr(c);
 		}
+		if (require != null) w(require);
 
 		if (defStack.length > 0)
 			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "') ");
