@@ -19,7 +19,7 @@ class HaxeExtern
 	public function new(out:Output)
 	{
 		this.iereg = ~/^( +)/mg;
-		this.sereg = ~/@since[^\d]+([\d\.]+)/;
+		this.sereg = ~/@since[^\.]+\.([\d]+)/;
 		this.indent = [];
 		this.out = out;
 	}
@@ -97,9 +97,9 @@ class HaxeExtern
 		}).array();
 
 		if (c.extend.length > 0)
-			w(' extends ' + c.extend.map(t).join(", "));
+			w(' extends ' + c.extend.map(t).join(" extends "));
 		if (c.implement.length > 0)
-			w(' implements ' + c.implement.map(t).join(', '));
+			w(' implements ' + c.implement.map(t).join(' implements '));
 
 		nl();
 		w('{');
@@ -121,8 +121,7 @@ class HaxeExtern
 					{
 					case JComment(c, true) if (sereg.match(c)):
 						var since = sereg.matched(1);
-						trace(since);
-						require = "@:require(java" + StringTools.replace(since.substr(since.indexOf('.') + 1), ".", "_") + ") ";
+						require = "@:require(java" +(since.substr(0,1)) + ") ";
 					default:
 					}
 				}
@@ -137,7 +136,7 @@ class HaxeExtern
 
 				f.kwds.remove('public');
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
-				
+
 				if (require != null) w(require);
 				for (k in f.kwds)
 					w("@:" + k +" ");
@@ -256,7 +255,7 @@ class HaxeExtern
 	{
 		return switch(t)
 		{
-			case AType(tp): this.t(tp);
+			case AType(tp), AWildcardExtends(tp), AWildcardSuper(tp): this.t(tp);
 			default: "Dynamic";
 		}
 	}

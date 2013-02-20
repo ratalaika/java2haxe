@@ -38,13 +38,13 @@ class Normalizer
 
 		this.definitionStack = [new StringMap()];
 	}
-	
+
 	/*
 	function applyParams(types:Array<GenericDecl>, params:Array<TArg>, t:TPath):TPath
 	{
 		if (types.length == 0)
 			return t;
-		
+
 		return switch(t)
 		{
 		case TArray(tp):
@@ -92,14 +92,14 @@ class Normalizer
 		var m = modules.get(path);
 		if (m == null)
 			return null;
-		
+
 		if (untyped m.norm == true)
 		{
 			return m;
 		}
-		
+
 		untyped m.norm = true;
-			
+
 		//add all modules in same package level to the definition stack
 		var ds = new StringMap();
 		definitionStack.push(ds);
@@ -148,9 +148,9 @@ class Normalizer
 		return m;
 	}
 
-	function normalizeField(f:ClassField)
+	function normalizeField(f:ClassField, isInterface)
 	{
-		if (f.kwds.has("private") || !(f.kwds.has('public') || f.kwds.has('protected')))
+		if (!isInterface && (f.kwds.has("private") || !(f.kwds.has('public') || f.kwds.has('protected'))))
 			return;
 		if (f.types != null && f.types.length > 0)
 		{
@@ -174,7 +174,7 @@ class Normalizer
 			definitionStack.pop();
 		}
 	}
-	
+
 	function fieldSig(f:ClassField)
 	{
 		return switch(f.kind)
@@ -184,7 +184,7 @@ class Normalizer
 		default: null;
 		}
 	}
-	
+
 	function tToString(t:TPath)
 	{
 		return switch(t)
@@ -213,16 +213,16 @@ class Normalizer
 				//go through all fields' definition and normalizeType()
 				for (f in c.fields)
 				{
-					normalizeField(f);
+					normalizeField(f, c.isInterface);
 				}
-				
+
 				//check overrides
-				if (!c.isInterface) 
+				if (!c.isInterface)
 				{
 					var funs = c.fields
 						.filter(function(f) return switch(f.kind) { case FFun(_): true; default: false; } );
 					var funSig = funs.map(fieldSig);
-					
+
 					var d = d;
 					while (d != null)
 					{
@@ -242,14 +242,14 @@ class Normalizer
 										//make sure it's normalized
 										var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
 										if (m == null) throw "assert";
-										
+
 										ext = { d : d2.d, p : params };
 										superType.set(c, ext);
 									}
 								default: throw "assert";
 								}
 							}
-							
+
 							if (ext != null)
 							{
 								switch(ext.d)
@@ -271,30 +271,33 @@ class Normalizer
 											}
 										}
 									}
-									
+
 									d = ext.d;
 								default: throw "assert";
 								}
-								
+
 							} else {
 								d = null;
 							}
-							
-							
+
+
 						default: throw "assert";
 						}
 					}
 				}
-				
+
 				for (i in c.implement)
 					normalizeType(i);
 				for (e in c.extend)
 					normalizeType(e);
 			}
 
+			for (d in c.childDefs) normalize(d);
+
 			definitionStack.pop();
-			
-		case EDef(_): //no need of any normalization for haxe
+
+		case EDef(e): //no need of any normalization for haxe
+			for (d in e.childDefs) normalize(d);
 		}
 
 	}
@@ -307,7 +310,7 @@ class Normalizer
 		t.t = nt(t.t);
 		untyped t.norm = true;
 	}
-	
+
 	function lookupPath(p:Array<String>, params:Array<TArg>):Null<{ m:Program, d:Definition, ic : Array<String> }>
 	{
 		//look for exact match
@@ -336,7 +339,7 @@ class Normalizer
 					case Module(m):
 						var innerStack = p.slice(1);
 						var d = getDefinitionFromModule(m, innerStack);
-						
+
 						if (d == null)
 						{
 							trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
@@ -345,6 +348,7 @@ class Normalizer
 
 						return { m : m, d: d, ic : innerStack };
 					case Submodule(m, innerClasses, def):
+						trace(p + " , " + innerClasses);
 						if (p.length > 1)
 						{
 							var innerStack = innerClasses.concat(p.slice(1));
@@ -354,7 +358,7 @@ class Normalizer
 								trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found for stack " + innerStack.join('.'));
 								return null;
 							}
-							
+
 							return { m : m, d: def, ic : innerStack };
 						} else {
 							return { m : m, d: def, ic : innerClasses };
@@ -380,7 +384,7 @@ class Normalizer
 						trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
 						return null;
 					}
-					
+
 					return { m : m, d : d, ic : innerStack };
 				}
 			}
@@ -413,7 +417,7 @@ class Normalizer
 			{
 				return TPath(p, params.map(na));
 			}
-			
+
 			return mkTPath(t.m, t.d, t.ic, params);
 		}
 	}
@@ -428,11 +432,12 @@ class Normalizer
 				path.push(root.name);
 		} else {
 			path = root.pack.copy();
-			path.push(root.name);
+			if (innerStack == null || innerStack.length == 0)
+				path.push(root.name);
 		}
 
 		if (innerStack != null && innerStack.length > 0)
-			path.push([root.name].concat(innerStack).join("_"));
+			path.push(innerStack.join("_"));
 
 		switch(def)
 		{
@@ -499,6 +504,7 @@ class Normalizer
 							continue;
 						}
 
+						diffpath.push(m.name);
 						diffpath.reverse();
 						var def = getDefinitionFromModule(m, diffpath);
 						if (def == null)
@@ -519,12 +525,12 @@ class Normalizer
 	private function addChildDefs(module:Program, ds:StringMap<ImportedDef>, def:Definition, innerStack:Array<String>)
 	{
 		var d = getDef(def);
+		innerStack.push(d.name);
 		if (innerStack.length > 0)
 		{
-			ds.set(d.name, Submodule(module, innerStack, def));
+			ds.set(d.name, Submodule(module, innerStack.copy(), def));
 		}
 
-		innerStack.push(d.name);
 		for (c in d.childDefs)
 			addChildDefs(module, ds, c, innerStack);
 		innerStack.pop();
