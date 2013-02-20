@@ -14,10 +14,12 @@ class HaxeExtern
 	private var program:Program;
 	private var indent:Array<String>;
 	private var iereg:EReg;
+	private var sereg:EReg;
 
 	public function new(out:Output)
 	{
 		this.iereg = ~/^( +)/mg;
+		this.sereg = ~/@since[^\d]+([\d\.]+)/;
 		this.indent = [];
 		this.out = out;
 	}
@@ -107,11 +109,23 @@ class HaxeExtern
 		for (f in c.fields)
 		{
 			//don't compile private or internal
-			if (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public")))
+			if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
 				continue;
 
+			var require = null;
 			if (f.comments != null)
 			{
+				for (c in f.comments)
+				{
+					switch(c.expr)
+					{
+					case JComment(c, true) if (sereg.match(c)):
+						var since = sereg.matched(1);
+						trace(since);
+						require = "@:require(java" + StringTools.replace(since.substr(since.indexOf('.') + 1), ".", "_") + ") ";
+					default:
+					}
+				}
 				for (c in f.comments) expr(c);
 			}
 
@@ -123,6 +137,8 @@ class HaxeExtern
 
 				f.kwds.remove('public');
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
+				
+				if (require != null) w(require);
 				for (k in f.kwds)
 					w("@:" + k +" ");
 
@@ -137,6 +153,7 @@ class HaxeExtern
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				var isStatic = f.kwds.remove('static');
 				f.kwds.remove('public');
+				if (require != null) w(require);
 
 				w("@:overload "); //necessary
 
@@ -144,6 +161,8 @@ class HaxeExtern
 					//w("@:throws('" + t(tw) + "') ");
 				for (k in f.kwds)
 					w("@:" + k +" ");
+				if (!isStatic && f.meta != null && f.meta.exists(function(f) return f.name == "Override"))
+					w("override ");
 				w(access);
 				if (isStatic) w("static ");
 				w('function ');

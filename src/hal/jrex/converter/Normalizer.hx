@@ -27,15 +27,39 @@ class Normalizer
 	//private var types:StringMap<Definition>;
 
 	private var definitionStack:Array<StringMap<ImportedDef>>;
+	private var superType:Map<ClassDef, { d: Definition, p : Array<TArg> }>;
 
 	public function new()
 	{
 		this.modules = new StringMap();
 		this.packs = new StringMap();
+		this.superType = new Map();
 		//this.types = new StringMap();
 
 		this.definitionStack = [new StringMap()];
 	}
+	
+	/*
+	function applyParams(types:Array<GenericDecl>, params:Array<TArg>, t:TPath):TPath
+	{
+		if (types.length == 0)
+			return t;
+		
+		return switch(t)
+		{
+		case TArray(tp):
+			TArray(applyParams(types, params, tp));
+		case TPath([p], []):
+			var i = 0;
+			for (t in types)
+			{
+				if (t.name == p)
+					return params
+				i++;
+			}
+		}
+	}
+	*/
 
 	public function addModule(p:Program):Void
 	{
@@ -68,7 +92,14 @@ class Normalizer
 		var m = modules.get(path);
 		if (m == null)
 			return null;
-
+		
+		if (untyped m.norm == true)
+		{
+			return m;
+		}
+		
+		untyped m.norm = true;
+			
 		//add all modules in same package level to the definition stack
 		var ds = new StringMap();
 		definitionStack.push(ds);
@@ -143,6 +174,25 @@ class Normalizer
 			definitionStack.pop();
 		}
 	}
+	
+	function fieldSig(f:ClassField)
+	{
+		return switch(f.kind)
+		{
+		case FFun(fn):
+			tToString(fn.ret.t) + " " + f.name + "(" + fn.args.map(function(a) return tToString(a.t.t)) + ")";
+		default: null;
+		}
+	}
+	
+	function tToString(t:TPath)
+	{
+		return switch(t)
+		{
+		case TArray(t): tToString(t) + "[";
+		case TPath(p, _): p.join(".");
+		}
+	}
 
 	function normalize(d:Definition)
 	{
@@ -165,7 +215,77 @@ class Normalizer
 				{
 					normalizeField(f);
 				}
-
+				
+				//check overrides
+				if (!c.isInterface) 
+				{
+					var funs = c.fields
+						.filter(function(f) return switch(f.kind) { case FFun(_): true; default: false; } );
+					var funSig = funs.map(fieldSig);
+					
+					var d = d;
+					while (d != null)
+					{
+						switch(d)
+						{
+						case CDef(c):
+							var ext = superType.get(c);
+							if (ext == null)
+							{
+								if (c.extend[0] != null) switch(c.extend[0].t)
+								{
+								case TPath(["java", "lang", "Object"], []):
+								case TPath(p, params):
+									var d2 = lookupPath(p, params);
+									if (d2 != null)
+									{
+										//make sure it's normalized
+										var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
+										if (m == null) throw "assert";
+										
+										ext = { d : d2.d, p : params };
+										superType.set(c, ext);
+									}
+								default: throw "assert";
+								}
+							}
+							
+							if (ext != null)
+							{
+								switch(ext.d)
+								{
+								case CDef(c):
+									//for each of our functions
+									var i = 0;
+									for (f in funs)
+									{
+										var sig = funSig[i++];
+										//look for fields of the exact same signature:
+										for (field in c.fields)
+										{
+											if (sig == fieldSig(field))
+											{
+												if (f.meta == null)
+													f.meta = [];
+												f.meta.push( { name:"Override", args:null, pos: f.pos } );
+											}
+										}
+									}
+									
+									d = ext.d;
+								default: throw "assert";
+								}
+								
+							} else {
+								d = null;
+							}
+							
+							
+						default: throw "assert";
+						}
+					}
+				}
+				
 				for (i in c.implement)
 					normalizeType(i);
 				for (e in c.extend)
@@ -173,6 +293,7 @@ class Normalizer
 			}
 
 			definitionStack.pop();
+			
 		case EDef(_): //no need of any normalization for haxe
 		}
 
@@ -185,6 +306,88 @@ class Normalizer
 
 		t.t = nt(t.t);
 		untyped t.norm = true;
+	}
+	
+	function lookupPath(p:Array<String>, params:Array<TArg>):Null<{ m:Program, d:Definition, ic : Array<String> }>
+	{
+		//look for exact match
+		var m = modules.get(p.join("."));
+		if (m != null)
+		{
+			for (d in m.defs)
+			{
+				if (getDef(d).name == p[p.length - 1])
+					return { m : m, d: d, ic : null };
+			}
+			throw "assert " + p + ", " + params + " , \n" + m;
+		} else {
+			//look in stack for matches
+			for (i in 1...(definitionStack.length+1))
+			{
+				var def = definitionStack[definitionStack.length - i];
+				var imp = def.get(p[0]);
+				if (imp != null)
+				{
+					switch(imp)
+					{
+					case TypeParameter:
+						if (p.length > 1 || params.length != 0) throw "assert";
+						return null; //no change
+					case Module(m):
+						var innerStack = p.slice(1);
+						var d = getDefinitionFromModule(m, innerStack);
+						
+						if (d == null)
+						{
+							trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
+							return null;
+						}
+
+						return { m : m, d: d, ic : innerStack };
+					case Submodule(m, innerClasses, def):
+						if (p.length > 1)
+						{
+							var innerStack = innerClasses.concat(p.slice(1));
+							var d = getDefinitionFromModule(m, innerStack);
+							if (d == null)
+							{
+								trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found for stack " + innerStack.join('.'));
+								return null;
+							}
+							
+							return { m : m, d: def, ic : innerStack };
+						} else {
+							return { m : m, d: def, ic : innerClasses };
+						}
+					}
+				}
+			}
+
+			//if still not found, look for modules in order
+			var cp = "";
+			for (i in 0...p.length)
+			{
+				if (cp != "") cp += ".";
+				cp += p[i];
+
+				var m = modules.get(cp);
+				if (m != null)
+				{
+					var innerStack = p.slice(i);
+					var d = getDefinitionFromModule(m, innerStack);
+					if (d == null)
+					{
+						trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
+						return null;
+					}
+					
+					return { m : m, d : d, ic : innerStack };
+				}
+			}
+
+			trace("WARNING: Path " + p.join(".") + " not found");
+			return null;
+		}
 	}
 
 	function nt(t:TPath):TPath
@@ -205,82 +408,13 @@ class Normalizer
 		TPath(["void"], []): t;
 
 		case TPath(p, params):
-			//look for exact match
-			var m = modules.get(p.join("."));
-			if (m != null)
+			var t = lookupPath(p, params);
+			if (t == null)
 			{
-				for (d in m.defs)
-				{
-					if (getDef(d).name == p[p.length - 1])
-						return mkTPath(m, d, null, params);
-				}
-				throw "assert " + p + ", " + params + " , \n" + m;
-			} else {
-				//look in stack for matches
-				for (i in 1...(definitionStack.length+1))
-				{
-					var def = definitionStack[definitionStack.length - i];
-					var imp = def.get(p[0]);
-					if (imp != null)
-					{
-						switch(imp)
-						{
-						case TypeParameter:
-							if (p.length > 1 || params.length != 0) throw "assert";
-							return TPath(p, params);
-						case Module(m):
-							var innerStack = p.slice(1);
-							var d = getDefinitionFromModule(m, innerStack);
-							if (d == null)
-							{
-								trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
-								return TPath(p, params.map(na));
-							}
-
-							return mkTPath(m, d, innerStack, params);
-						case Submodule(m, innerClasses, def):
-							if (p.length > 1)
-							{
-								var innerStack = innerClasses.concat(p.slice(1));
-								var d = getDefinitionFromModule(m, innerStack);
-								if (d == null)
-								{
-									trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found for stack " + innerStack.join('.'));
-									return TPath(p, params.map(na));
-								}
-								return mkTPath(m, d, innerStack, params);
-							} else {
-								return mkTPath(m, def, innerClasses, params);
-							}
-						}
-					}
-				}
-
-				//if still not found, look for modules in order
-				var cp = "";
-				for (i in 0...p.length)
-				{
-					if (cp != "") cp += ".";
-					cp += p[i];
-
-					var m = modules.get(cp);
-					if (m != null)
-					{
-						var innerStack = p.slice(i);
-						var d = getDefinitionFromModule(m, innerStack);
-						if (d == null)
-						{
-							trace("WARNING: Module " + m.pack.join(".") + "." + m.name + " found for type " + p.join(".") + ", but no matching submodule was found");
-							return TPath(p, params.map(na));
-						}
-
-						return mkTPath(m, d, innerStack, params);
-					}
-				}
-
-				trace("WARNING: Path " + p.join(".") + " not found");
 				return TPath(p, params.map(na));
 			}
+			
+			return mkTPath(t.m, t.d, t.ic, params);
 		}
 	}
 
