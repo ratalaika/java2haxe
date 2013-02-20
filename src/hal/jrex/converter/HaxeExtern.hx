@@ -67,11 +67,11 @@ class HaxeExtern
 
 	private function isHxKeyword(s:String):Bool
 	{
-		switch(s)
+		return switch(s)
 		{
 			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var":
-				true
-			default: false
+				true;
+			default: false;
 		}
 	}
 
