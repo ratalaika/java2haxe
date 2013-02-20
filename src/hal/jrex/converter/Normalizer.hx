@@ -224,6 +224,9 @@ class Normalizer
 					var funSig = funs.map(fieldSig);
 
 					var d = d;
+					var statics = new StringMap();
+					var nonstatics = new StringMap();
+					var first = true;
 					while (d != null)
 					{
 						switch(d)
@@ -249,6 +252,34 @@ class Normalizer
 								default: throw "assert";
 								}
 							}
+							if (first)
+							{
+								//take off var fields that clash with functions
+								c.fields = c.fields.filter(function (f) {
+									return !c.fields.exists(function(f2)
+										return f != f2 && f.name == f2.name && f.kwds.has("static") == f2.kwds.has("static") &&
+										switch [f.kind, f2.kind]
+										{
+											case [FVar(_), FFun(_)]: true;
+											default:false;
+										});
+								});
+								for (f in c.fields)
+								{
+									if (f.kwds.has("static"))
+									{
+										var s = statics.get(f.name);
+										if (s == null)
+										{
+											s = [];
+											statics.set(f.name, s);
+										}
+										s.push(f);
+									} else {
+										nonstatics.set(f.name, true);
+									}
+								}
+							}
 
 							if (ext != null)
 							{
@@ -263,12 +294,15 @@ class Normalizer
 										//look for fields of the exact same signature:
 										for (field in c.fields)
 										{
+											if (field.kwds.has("static")) continue;
 											if (sig == fieldSig(field))
 											{
 												if (f.meta == null)
 													f.meta = [];
 												f.meta.push( { name:"Override", args:null, pos: f.pos } );
 											}
+
+											nonstatics.set(field.name, true);
 										}
 									}
 
@@ -283,6 +317,18 @@ class Normalizer
 
 						default: throw "assert";
 						}
+						if (first) first = false;
+					}
+
+					for (s in statics.keys())
+					{
+						if (nonstatics.exists(s))
+						{
+							for(f in statics.get(s))
+							{
+								f.name = "%" + f.name;
+							}
+						}
 					}
 				}
 
@@ -291,6 +337,7 @@ class Normalizer
 				for (e in c.extend)
 					normalizeType(e);
 			}
+
 
 			for (d in c.childDefs) normalize(d);
 
@@ -348,7 +395,6 @@ class Normalizer
 
 						return { m : m, d: d, ic : innerStack };
 					case Submodule(m, innerClasses, def):
-						trace(p + " , " + innerClasses);
 						if (p.length > 1)
 						{
 							var innerStack = innerClasses.concat(p.slice(1));

@@ -23,7 +23,7 @@ class Main
 
 		//var p = new Parser().parseString(Test1.x, "file.java");
 		//var p = new Parser().parseString('package java.lang; public class Test { public String toString(); }', "file.java");
-		var path = "../example/classes/java";
+		var path = "../example/classes";
 		//var path = "../example/classes/java/awt/font";
 
 		recurse(path);

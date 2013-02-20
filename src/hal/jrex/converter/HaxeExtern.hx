@@ -138,6 +138,11 @@ class HaxeExtern
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 
 				if (require != null) w(require);
+
+				if (f.name.charCodeAt(0) == '%'.code)
+				{
+					w("@:native(" + f.name.substr(1) + ") ");
+				}
 				for (k in f.kwds)
 					w("@:" + k +" ");
 
@@ -153,6 +158,10 @@ class HaxeExtern
 				var isStatic = f.kwds.remove('static');
 				f.kwds.remove('public');
 				if (require != null) w(require);
+				if (f.name.charCodeAt(0) == '%'.code)
+				{
+					w("@:native(" + f.name.substr(1) + ") ");
+				}
 
 				w("@:overload "); //necessary
 
@@ -168,7 +177,7 @@ class HaxeExtern
 				if (f.name == c.name)
 					w("new");
 				else
-					w(f.name);
+					w(id(f.name));
 
 				if (f.types != null && f.types.length > 0)
 					w("<" + f.types.map(generic).join(", ") + ">");
@@ -263,7 +272,7 @@ class HaxeExtern
 	private function id(s:String):String
 	{
 		//TODO include haxe keywords
-		return s;
+		return StringTools.replace(s, "%", "_");
 	}
 
 	private function generic(gd:GenericDecl):String
