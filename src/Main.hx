@@ -23,7 +23,7 @@ class Main
 
 		//var p = new Parser().parseString(Test1.x, "file.java");
 		//var p = new Parser().parseString('package java.lang; public class Test { public String toString(); }', "file.java");
-		var path = "../example/classes/java/lang";
+		var path = "../example/classes/java";
 		//var path = "../example/classes/java/awt/font";
 
 		recurse(path);
@@ -54,10 +54,9 @@ class Main
 			var fpath = path + "/" + file;
 			if (FileSystem.isDirectory(fpath))
 			{
-				//recurse(fpath);
+				recurse(fpath);
 				continue;
 			}
-			if (file != "Character.java") continue;
 
 			if (file.charCodeAt(0) < 'A'.code || file.charCodeAt(0) > 'Z'.code || !StringTools.endsWith(file.toLowerCase(), '.java'))
 				continue;
