@@ -69,7 +69,7 @@ class HaxeExtern
 	{
 		return switch(s)
 		{
-			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var":
+			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var", "untyped", "inline":
 				true;
 			default: false;
 		}
@@ -220,7 +220,7 @@ class HaxeExtern
 						first = false;
 					else
 						w(", ");
-					w(a.name);
+					w(id(a.name));
 					w(" : ");
 					w(t(a.t));
 				}
@@ -228,7 +228,7 @@ class HaxeExtern
 				if (fn.varArgs != null)
 				{
 					if (!first) w(", ");
-					w(fn.varArgs.name);
+					w(id(fn.varArgs.name));
 					w(" : ");
 					w(t({ final : fn.varArgs.t.final, t : TArray(fn.varArgs.t.t) }));
 				}

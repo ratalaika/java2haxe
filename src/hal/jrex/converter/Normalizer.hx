@@ -180,7 +180,7 @@ class Normalizer
 		return switch(f.kind)
 		{
 		case FFun(fn):
-			tToString(fn.ret.t) + " " + f.name + "(" + fn.args.map(function(a) return tToString(a.t.t)) + ")";
+			f.name + "(" + fn.args.map(function(a) return tToString(a.t.t)) + ")";
 		default: null;
 		}
 	}
@@ -222,6 +222,10 @@ class Normalizer
 					var funs = c.fields
 						.filter(function(f) return switch(f.kind) { case FFun(_): true; default: false; } );
 					var funSig = funs.map(fieldSig);
+					for( f in funs )
+					{
+						f.meta = f.meta.filter(function(m) return m.name != "Override");
+					}
 
 					var d = d;
 					var statics = new StringMap();
@@ -464,7 +468,7 @@ class Normalizer
 				return TPath(p, params.map(na));
 			}
 
-			return mkTPath(t.m, t.d, t.ic, params);
+			return mkTPath(t.m, t.d, t.ic, params.map(na));
 		}
 	}
 
