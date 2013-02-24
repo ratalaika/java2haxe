@@ -1,6 +1,7 @@
 package hal.jrex.converter;
 import hal.jrex.Java;
 import haxe.io.Output;
+import haxe.ds.StringMap;
 
 using Lambda;
 /**
@@ -15,13 +16,18 @@ class HaxeExtern
 	private var indent:Array<String>;
 	private var iereg:EReg;
 	private var sereg:EReg;
+	private var opts:StringMap<Bool>;
+	private var since:Bool;
 
-	public function new(out:Output)
+	public function new(out:Output, opts)
 	{
 		this.iereg = ~/^( +)/mg;
 		this.sereg = ~/@since[^\.]+\.([\d]+)/;
 		this.indent = [];
 		this.out = out;
+		this.opts = opts;
+
+		this.since = opts.exists('parse-since');
 	}
 
 	private function beginIndent()
@@ -78,8 +84,9 @@ class HaxeExtern
 	private function convertClass(c:ClassDef, defStack:Array<String>)
 	{
 		//don't compile private or internal
+		var isPrivate = false;
 		if (c.kwds.has("private") || (!c.kwds.has("protected") && !c.kwds.has("public")))
-			return;
+			isPrivate = true;
 
 		var require = null;
 		if (c.comments != null)
@@ -96,13 +103,13 @@ class HaxeExtern
 			}
 			for (c in c.comments) expr(c);
 		}
-		if (require != null) w(require);
+		if (since && require != null) w(require);
 
 		if (defStack.length > 0)
-			w("@:native('" + program.pack.concat(defStack).join(".") + "." + c.name + "') ");
+			w("@:native('" + program.pack.concat(defStack).join("$") + "$" + c.name + "') ");
 
-		if (c.kwds.has("protected"))
-			w('private ');
+		if (isPrivate)
+			w('@:internal ');
 		if (c.isInterface)
 			w('extern interface ');
 		else
@@ -158,7 +165,7 @@ class HaxeExtern
 				f.kwds.remove('public');
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 
-				if (require != null) w(require);
+				if (since && require != null) w(require);
 
 				if (f.name.charCodeAt(0) == '%'.code)
 				{
@@ -183,7 +190,7 @@ class HaxeExtern
 				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
 				var isStatic = f.kwds.remove('static');
 				f.kwds.remove('public');
-				if (require != null) w(require);
+				if (since && require != null) w(require);
 				if (f.name.charCodeAt(0) == '%'.code)
 				{
 					w("@:native('" + f.name.substr(1) + "') ");
@@ -245,7 +252,15 @@ class HaxeExtern
 
 		defStack.push(c.name);
 		for (d in c.childDefs)
-			definition(d, defStack);
+		{
+			switch(d)
+			{
+				case CDef(c):
+					if (c.kwds.has("static"))
+						definition(d, defStack);
+				default: definition(d, defStack);
+			}
+		}
 		defStack.pop();
 	}
 
@@ -319,8 +334,6 @@ class HaxeExtern
 
 	private function convertEnum(e:EnumDef, defStack:Array<String>)
 	{
-		if (e.kwds.has('private') || !(e.kwds.has('protected') || e.kwds.has('public')))
-			return;
 		var require = null;
 		if (e.comments != null)
 		{
@@ -336,10 +349,10 @@ class HaxeExtern
 			}
 			for (c in e.comments) expr(c);
 		}
-		if (require != null) w(require);
+		if (since && require != null) w(require);
 
 		if (defStack.length > 0)
-			w("@:native('" + program.pack.concat(defStack).join(".") + "." + e.name + "') ");
+			w("@:native('" + program.pack.concat(defStack).join("$") + "$" + e.name + "') ");
 
 		if (e.kwds.has("private") || e.kwds.has("protected"))
 			w('private');

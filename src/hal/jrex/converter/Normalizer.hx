@@ -150,8 +150,6 @@ class Normalizer
 
 	function normalizeField(f:ClassField, isInterface)
 	{
-		if (!isInterface && (f.kwds.has("private") || !(f.kwds.has('public') || f.kwds.has('protected'))))
-			return;
 		if (f.types != null && f.types.length > 0)
 		{
 			var ds = new StringMap();
@@ -199,8 +197,6 @@ class Normalizer
 		switch(d)
 		{
 		case CDef(c):
-			if (c.kwds.has("private") || !(c.kwds.has('public') || c.kwds.has('protected')))
-				return;
 			//add another definitionStack for the type parameters
 			var ds = new StringMap();
 			definitionStack.push(ds);
@@ -362,7 +358,7 @@ class Normalizer
 		untyped t.norm = true;
 	}
 
-	function lookupPath(p:Array<String>, params:Array<TArg>):Null<{ m:Program, d:Definition, ic : Array<String> }>
+	function lookupPath(p:Array<String>, params:Array<TArg>):Null<{ m:Program, d:Definition, ic : Array<String>, ?typeParam:Bool }>
 	{
 		//look for exact match
 		var m = modules.get(p.join("."));
