@@ -34,7 +34,8 @@ class Main
 		var len = args.length;
 		var paths = [];
 		var outPath = null;
-		var opts = new StringMap(), arg = 0;
+		var opts = new StringMap(), arg = 1;
+		if (args[0] != 'externs') error("invalid build method '" + args[0] + "' did you mean externs?");
 		while(arg < len)
 		{
 			switch(args[arg++])
@@ -67,7 +68,7 @@ class Main
 		outPath += '/';
 		for (md in m.norm.allModules())
 		{
-			m.log(" Generating " + m);
+			m.log(" Generating " + md);
 			var md = m.norm.getNormalizedModule(md);
 			var cur = [];
 			for (p in md.pack)

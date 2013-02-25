@@ -79,9 +79,11 @@ class HaxeExtern
 		{
 		case EDef(e): convertEnum(e, defStack);
 		case CDef(c):
-			typeParamsStack.push(c.types.map(function(t) return t.name));
+			if (c.types != null)
+				typeParamsStack.push(c.types.map(function(t) return t.name));
 			convertClass(c, defStack);
-			typeParamsStack.pop();
+			if (c.types != null)
+				typeParamsStack.pop();
 		}
 	}
 
@@ -159,7 +161,8 @@ class HaxeExtern
 			if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
 				continue;
 
-			typeParamsStack.push(f.types.map(function(t) return t.name));
+			if (f.types != null)
+				typeParamsStack.push(f.types.map(function(t) return t.name));
 			var require = null;
 			if (f.comments != null)
 			{
@@ -263,7 +266,8 @@ class HaxeExtern
 				w(t(fn.ret));
 				w(";"); nl(); nl();
 			}
-			typeParamsStack.pop();
+			if (f.types != null)
+				typeParamsStack.pop();
 		}
 
 		endIndent();
@@ -276,9 +280,8 @@ class HaxeExtern
 		{
 			switch(d)
 			{
-				case CDef(c):
-					if (c.kwds.has("static"))
-						definition(d, defStack);
+				case CDef(_):
+					definition(d, defStack);
 				default: definition(d, defStack);
 			}
 		}
@@ -318,6 +321,14 @@ class HaxeExtern
 			case TPath(["java", "lang", "Class"], params ): "Class<" + params.map(targ).join(", ") + ">";
 
 			//case TPath(["java", "lang", ", params):
+			case TPath([p], []) if (p.charCodeAt(0) == '*'.code):
+				var p = p.substr(1);
+				if (lookupTypeParam(p))
+				{
+					p;
+				} else {
+					"Dynamic";
+				}
 			case TPath(p, params) if (params == null || params.length == 0):
 				p.join(".");
 			case TPath(p, params):

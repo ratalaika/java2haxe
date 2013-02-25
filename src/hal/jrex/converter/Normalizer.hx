@@ -461,7 +461,7 @@ class Normalizer
 			var t = lookupPath(p, params);
 			if (t == null || t.typeParam)
 			{
-				if (t.typeParam) p[0] = "*" + p[0];
+				if (t != null && t.typeParam) p[0] = "*" + p[0];
 				return TPath(p, params.map(na));
 			}
 
@@ -505,7 +505,11 @@ class Normalizer
 		{
 		case AType(t):
 			AType({ t : nt(t.t), final: t.final });
-		default: a; //wildcards == Dynamic in Haxe
+		case AWildcardExtends(t):
+			AWildcardExtends({ t: nt(t.t), final: t.final });
+		case AWildcardSuper(t):
+			AWildcardSuper({ t: nt(t.t), final: t.final});
+		case AWildcard: a;
 		}
 	}
 
