@@ -18,6 +18,7 @@ class HaxeExtern
 	private var sereg:EReg;
 	private var opts:StringMap<Bool>;
 	private var since:Bool;
+	private var typeParamsStack:Array<Array<String>>;
 
 	public function new(out:Output, opts)
 	{
@@ -28,6 +29,21 @@ class HaxeExtern
 		this.opts = opts;
 
 		this.since = opts.exists('parse-since');
+		typeParamsStack = [];
+	}
+
+	public function lookupTypeParam(s:String)
+	{
+		for(tp in typeParamsStack)
+		{
+			for(t in tp)
+			{
+				if (s == t)
+					return true;
+			}
+		}
+
+		return false;
 	}
 
 	private function beginIndent()
@@ -62,7 +78,10 @@ class HaxeExtern
 		switch(d)
 		{
 		case EDef(e): convertEnum(e, defStack);
-		case CDef(c): convertClass(c, defStack);
+		case CDef(c):
+			typeParamsStack.push(c.types.map(function(t) return t.name));
+			convertClass(c, defStack);
+			typeParamsStack.pop();
 		}
 	}
 
@@ -140,6 +159,7 @@ class HaxeExtern
 			if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
 				continue;
 
+			typeParamsStack.push(f.types.map(function(t) return t.name));
 			var require = null;
 			if (f.comments != null)
 			{
@@ -243,6 +263,7 @@ class HaxeExtern
 				w(t(fn.ret));
 				w(";"); nl(); nl();
 			}
+			typeParamsStack.pop();
 		}
 
 		endIndent();

@@ -240,7 +240,7 @@ class Normalizer
 								case TPath(["java", "lang", "Object"], []):
 								case TPath(p, params):
 									var d2 = lookupPath(p, params);
-									if (d2 != null)
+									if (d2 != null && !d2.typeParam)
 									{
 										//make sure it's normalized
 										var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
@@ -382,7 +382,7 @@ class Normalizer
 					{
 					case TypeParameter:
 						if (p.length > 1 || params.length != 0) throw "assert";
-						return null; //no change
+						return { m:null, d:null, ic:null, typeParam:true}; //no change
 					case Module(m):
 						var innerStack = p.slice(1);
 						var d = getDefinitionFromModule(m, innerStack);
@@ -459,8 +459,9 @@ class Normalizer
 
 		case TPath(p, params):
 			var t = lookupPath(p, params);
-			if (t == null)
+			if (t == null || t.typeParam)
 			{
+				if (t.typeParam) p[0] = "*" + p[0];
 				return TPath(p, params.map(na));
 			}
 
