@@ -160,6 +160,8 @@ class HaxeExtern
 			//don't compile private or internal
 			if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
 				continue;
+			if (c.isInterface && f.kwds.has("static"))
+				continue;
 
 			if (f.types != null)
 				typeParamsStack.push(f.types.map(function(t) return t.name));

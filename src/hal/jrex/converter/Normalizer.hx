@@ -384,7 +384,11 @@ class Normalizer
 						if (p.length > 1 || params.length != 0) throw "assert";
 						return { m:null, d:null, ic:null, typeParam:true}; //no change
 					case Module(m):
-						var innerStack = p.slice(1);
+						var innerStack = null;
+						if (p[0] == m.name)
+							innerStack = p.slice(1);
+						else
+							innerStack = p.copy();
 						var d = getDefinitionFromModule(m, innerStack);
 
 						if (d == null)
