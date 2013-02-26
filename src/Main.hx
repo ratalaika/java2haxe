@@ -116,7 +116,14 @@ class Main
 	static function recurse(path, m:Main)
 	{
 		m.log("Checking path : " + path);
-		for (file in FileSystem.readDirectory(path))
+		var files = if (FileSystem.isDirectory(path)) {
+			FileSystem.readDirectory(path);
+		} else {
+			var ret = [haxe.io.Path.withoutDirectory(path)];
+			path = haxe.io.Path.directory(path);
+			ret;
+		};
+		for (file in files)
 		{
 			var fpath = path + "/" + file;
 			if (FileSystem.isDirectory(fpath))

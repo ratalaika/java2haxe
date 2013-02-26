@@ -183,7 +183,10 @@ class Parser {
 			switch(t) {
 			case TId(s):
 				if( s != "package" )
-					unexpected(t);
+				{
+					add(t);
+					break;
+				}
 				if( opt(TSemicolon) )
 					pack = []
 				else {
@@ -225,6 +228,9 @@ class Parser {
 				}
 			case TComment(s,b):
 				header.push(mk(JComment(s,b), tpos));
+				continue;
+			case TSemicolon:
+				end();
 				continue;
 			default:
 			}
@@ -269,6 +275,7 @@ class Parser {
 				default: unexpected(tk);
 				}
 			case TSemicolon:
+				end();
 				break;
 			default:
 				unexpected(tk);
@@ -297,7 +304,18 @@ class Parser {
 			var args = null;
 			if ( opt(TPOpen) )
 			{
-				args = parseExprList(TPClose);
+				//TODO parse expressions correctly
+				var n = 1;
+				while( n > 0)
+				{
+					switch(token())
+					{
+					case TPOpen: n++;
+					case TPClose: n--;
+					default:
+					}
+				}
+				//args = parseExprList(TPClose);
 			}
 			ml.push( { name : name, args : args, pos : mkPos(min) } );
 		}
@@ -407,6 +425,7 @@ class Parser {
 				add(tk);
 				break;
 			case TSemicolon:
+				end();
 				break;
 			case TId(id):
 
@@ -596,6 +615,7 @@ class Parser {
 					default:
 						add(t);
 						//first parse type
+						parseMetadata();
 						var t = parseType();
 						#if debug trace(t); #end
 
@@ -723,7 +743,7 @@ class Parser {
 
 								lastComment = null;
 								name = null;
-								if (opt(TSemicolon)) break;
+								if (opt(TSemicolon)) { end(); break; }
 							} while (opt(TComma));
 						}
 
@@ -773,6 +793,7 @@ class Parser {
 		if (t == "final")
 		{
 			isFinal = true;
+			if (peek() == TAt) parseMetadata();
 			t = id();
 		}
 
@@ -828,7 +849,7 @@ class Parser {
 				case TId(_):
 					add(tk);
 					params.push(AType(parseType()));
-				case TComma:
+				case TComma, TDot:
 					continue;
 				default:
 					unexpected(tk);
@@ -862,6 +883,7 @@ class Parser {
 				{
 					return { args : args, varArgs : null }
 				}
+				parseMetadata();
 				var type = parseType();
 				if (opt(TDot))
 				{

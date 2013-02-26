@@ -244,7 +244,10 @@ class Normalizer
 									{
 										//make sure it's normalized
 										var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
-										if (m == null) throw "assert";
+										if (m == null)
+										{
+											trace("WARNING: Mudle not found " + d2.m.pack.join(".") + "." + d2.m.name);
+										}
 
 										ext = { d : d2.d, p : params };
 										superType.set(c, ext);
@@ -385,10 +388,7 @@ class Normalizer
 						return { m:null, d:null, ic:null, typeParam:true}; //no change
 					case Module(m):
 						var innerStack = null;
-						if (p[0] == m.name)
-							innerStack = p.slice(1);
-						else
-							innerStack = p.copy();
+						innerStack = p.copy();
 						var d = getDefinitionFromModule(m, innerStack);
 
 						if (d == null)
@@ -409,7 +409,7 @@ class Normalizer
 								return null;
 							}
 
-							return { m : m, d: def, ic : innerStack };
+							return { m : m, d: d, ic : innerStack };
 						} else {
 							return { m : m, d: def, ic : innerClasses };
 						}
@@ -483,7 +483,7 @@ class Normalizer
 				path.push(root.name);
 		} else {
 			path = root.pack.copy();
-			if (innerStack == null || innerStack.length == 0)
+			if (innerStack == null || innerStack.length != 1 || innerStack[0] != root.name)
 				path.push(root.name);
 		}
 

@@ -75,16 +75,31 @@ class HaxeExtern
 
 	private function definition(d:Definition, defStack:Array<String>)
 	{
+		var childDefs = null, name = null;
 		switch(d)
 		{
-		case EDef(e): convertEnum(e, defStack);
+		case EDef(e): convertEnum(e, defStack); childDefs = e.childDefs; name = e.name;
 		case CDef(c):
 			if (c.types != null)
 				typeParamsStack.push(c.types.map(function(t) return t.name));
 			convertClass(c, defStack);
 			if (c.types != null)
 				typeParamsStack.pop();
+			childDefs = c.childDefs;
+			name = c.name;
 		}
+
+		defStack.push(name);
+		for (d in childDefs)
+		{
+			switch(d)
+			{
+				case CDef(_):
+					definition(d, defStack);
+				default: definition(d, defStack);
+			}
+		}
+		defStack.pop();
 	}
 
 	private inline function w(s:String)
@@ -276,18 +291,6 @@ class HaxeExtern
 		nl();
 		w('}');
 		nl();
-
-		defStack.push(c.name);
-		for (d in c.childDefs)
-		{
-			switch(d)
-			{
-				case CDef(_):
-					definition(d, defStack);
-				default: definition(d, defStack);
-			}
-		}
-		defStack.pop();
 	}
 
 	private function t(t:T):String
