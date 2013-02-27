@@ -148,6 +148,12 @@ class Normalizer
 		return m;
 	}
 
+	function normalizeGeneric(g:GenericDecl)
+	{
+		if (g.extend != null)
+			for (e in g.extend) normalizeType(e);
+	}
+
 	function normalizeField(f:ClassField, isInterface)
 	{
 		if (f.types != null && f.types.length > 0)
@@ -157,6 +163,7 @@ class Normalizer
 			for (t in f.types)
 				ds.set(t.name, TypeParameter);
 		}
+		var field = f;
 		switch(f.kind)
 		{
 		case FVar(t, _): normalizeType(t);
@@ -165,6 +172,7 @@ class Normalizer
 			normalizeType(f.ret);
 			if (f.varArgs != null)
 				normalizeType(f.varArgs.t);
+			if (field.types != null) for (t in field.types) normalizeGeneric(t);
 		}
 
 		if (f.types != null && f.types.length > 0)
@@ -223,6 +231,7 @@ class Normalizer
 					normalizeField(f, c.isInterface);
 				}
 
+				if (c.types != null) for(t in c.types) normalizeGeneric(t);
 				var neededFields = new StringMap();
 				function tToDef(t:T)
 				{
