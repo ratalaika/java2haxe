@@ -111,7 +111,7 @@ class HaxeExtern
 	{
 		return switch(s)
 		{
-			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var", "untyped", "inline":
+			case "callback", "cast", "extern", "function", "in", "typedef", "using", "var", "untyped", "inline", "dynamic", "here", "never", "null", "override", "trace":
 				true;
 			default: false;
 		}
