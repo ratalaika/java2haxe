@@ -162,6 +162,11 @@ class HaxeExtern
 
 		if (c.extend.length > 0)
 			w(' extends ' + c.extend.map(t).join(" extends "));
+
+		/*c.implement = c.implement.filter(function(t) { return switch(t.t) {
+			case TPath(["java", "lang", "CharSequence"], [] ): false;
+			default: true;
+		}});*/
 		if (c.implement.length > 0)
 			w(' implements ' + c.implement.map(t).join(' implements '));
 
@@ -247,7 +252,7 @@ class HaxeExtern
 					//w("@:throws('" + t(tw) + "') ");
 				for (k in f.kwds)
 					w("@:" + k +" ");
-				if (!isStatic && f.meta != null && f.meta.exists(function(f) return f.name == "Override"))
+				if (!c.isInterface && !isStatic && f.meta != null && f.meta.exists(function(f) return f.name == "Override"))
 					w("override ");
 				w(access);
 				if (isStatic) w("static ");
@@ -323,6 +328,7 @@ class HaxeExtern
 
 			case TPath(["java", "lang", "Object"], [] ): "Dynamic";
 			case TPath(["java", "lang", "String"], [] ): "String";
+			//case TPath(["java", "lang", "CharSequence"], [] ): "String";
 			case TPath(["java", "lang", "Class"], params ): "Class<" + params.map(targ).join(", ") + ">";
 
 			//case TPath(["java", "lang", ", params):

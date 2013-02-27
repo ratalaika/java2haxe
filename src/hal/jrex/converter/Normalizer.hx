@@ -188,6 +188,7 @@ class Normalizer
 		return switch(t)
 		{
 		case TArray(t): tToString(t) + "[";
+		case TPath([p], []) if (p.charCodeAt(0) == '*'.code): "java.lang.Object";
 		case TPath(p, _): p.join(".");
 		}
 	}
@@ -210,6 +211,62 @@ class Normalizer
 				for (f in c.fields)
 				{
 					normalizeField(f, c.isInterface);
+				}
+
+				var neededFields = new StringMap();
+				function tToDef(t:T)
+				{
+					switch(t.t)
+					{
+					case TPath(p, params):
+						var d2 = lookupPath(p, params);
+						if (d2 != null && !d2.typeParam)
+						{
+							//make sure it's normalized
+							var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
+							if (m == null)
+							{
+								trace("WARNING: Module not found " + d2.m.pack.join(".") + "." + d2.m.name);
+								return null;
+							}
+
+							return d2.d;
+						}
+						return null;
+					default: throw "assert";
+					}
+				}
+
+				if (c.kwds.has("abstract"))
+				{
+					function loop(iface:T)
+					{
+						var iface = tToDef(iface);
+						if (iface != null) switch(iface)
+						{
+							case CDef(c):
+								if (c.implement != null) for (i in c.implement)
+									loop(i);
+								for (f in c.fields)
+									switch(f.kind)
+									{
+										case FFun(_): neededFields.set(fieldSig(f), f);
+										default:
+									}
+							default:
+						}
+					}
+					for (i in c.implement) loop(i);
+
+					for (f in c.fields)
+					{
+						neededFields.remove(fieldSig(f));
+					}
+
+					for (sig in neededFields.keys())
+					{
+						c.fields.push(neededFields.get(sig));
+					}
 				}
 
 				//check overrides
