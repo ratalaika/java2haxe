@@ -189,6 +189,16 @@ class Normalizer
 		{
 		case TArray(t): tToString(t) + "[";
 		case TPath([p], []) if (p.charCodeAt(0) == '*'.code): "java.lang.Object";
+		case TPath(["int"], []),
+		TPath(["byte"], []),
+		TPath(["char"], []),
+		TPath(["double"], []),
+		TPath(["float"], []),
+		TPath(["long"], []),
+		TPath(["short"], []),
+		TPath(["boolean"], []),
+		TPath(["void"], []): switch(t) { case TPath([p],_): p; default: throw "assert"; };
+		case TPath([p], _): cur.pack.join(".") + "." + p;
 		case TPath(p, _): p.join(".");
 		}
 	}
@@ -260,7 +270,9 @@ class Normalizer
 
 					for (f in c.fields)
 					{
-						neededFields.remove(fieldSig(f));
+						var sig = fieldSig(f);
+						if (sig != null)
+							neededFields.remove(sig);
 					}
 
 					for (sig in neededFields.keys())
