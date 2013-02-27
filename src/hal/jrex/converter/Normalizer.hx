@@ -186,7 +186,7 @@ class Normalizer
 		return switch(f.kind)
 		{
 		case FFun(fn):
-			f.name + "(" + fn.args.map(function(a) return tToString(a.t.t)) + ")";
+			f.name + "(" + fn.args.map(function(a) return tToString(a.t.t)).join(",") + ")";
 		default: null;
 		}
 	}
@@ -231,6 +231,17 @@ class Normalizer
 					normalizeField(f, c.isInterface);
 				}
 
+				if (c.isInterface)
+				{
+					c.fields = c.fields.filter(function(f) {
+						return switch(fieldSig(f))
+						{
+							case "equals(java.lang.Object)", 'toString()', 'hashCode()', 'clone()', 'finalize()': false;
+							default: true;
+						}
+					});
+				}
+
 				if (c.types != null) for(t in c.types) normalizeGeneric(t);
 				var neededFields = new StringMap();
 				function tToDef(t:T)
@@ -258,24 +269,28 @@ class Normalizer
 
 				if (c.kwds.has("abstract"))
 				{
+					trace("is abstract " + c.name);
 					function loop(iface:T)
 					{
 						var iface = tToDef(iface);
 						if (iface != null) switch(iface)
 						{
 							case CDef(c):
-								if (c.implement != null) for (i in c.implement)
+								trace("looping at " + c.name);
+								if (c.extend != null) for (i in c.extend)
 									loop(i);
 								for (f in c.fields)
 									switch(f.kind)
 									{
-										case FFun(_): neededFields.set(fieldSig(f), f);
+										case FFun(_):
+											trace("added neededfields " + fieldSig(f));
+											neededFields.set(fieldSig(f), f);
 										default:
 									}
 							default:
 						}
 					}
-					for (i in c.implement) loop(i);
+					if (c.implement != null) for (i in c.implement) loop(i);
 
 					for (f in c.fields)
 					{
@@ -286,7 +301,10 @@ class Normalizer
 
 					for (sig in neededFields.keys())
 					{
-						c.fields.push(neededFields.get(sig));
+						trace("found more sig " + sig);
+						var s = neededFields.get(sig);
+						s.kwds.push("public");
+						c.fields.push(s);
 					}
 				}
 

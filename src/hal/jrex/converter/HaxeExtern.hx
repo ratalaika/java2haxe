@@ -200,6 +200,10 @@ class HaxeExtern
 				}
 				for (c in f.comments) expr(c);
 			}
+			if (c.name == "CharSequence")
+			{
+				w("//");
+			}
 
 			switch(f.kind)
 			{
