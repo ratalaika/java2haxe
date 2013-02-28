@@ -224,26 +224,36 @@ class Normalizer
 				ds.set(tp.name, TypeParameter);
 			}
 
-			var all = (c.extend != null ? c.extend : []).concat(c.implement != null ? c.implement : []);
-			for (c in all)
+			function loop(def)
 			{
-				switch(c.t)
+				switch(def)
 				{
-					case TPath(p, t):
-						var d = lookupPath(p, t);
-						if (d != null && !d.typeParam)
+					case CDef(c):
+						var all = (c.extend != null ? c.extend : []).concat(c.implement != null ? c.implement : []);
+						for (c in all)
 						{
-							ds.set(d.m.name, Module(d.m));
-							for (df in d.m.defs)
+							switch(c.t)
 							{
-								if (getDef(df).name != d.m.name)
-									ds.set(getDef(df).name, Submodule(d.m, [], df));
-								addChildDefs(d.m, ds, df, []);
+								case TPath(p, t):
+									var d = lookupPath(p, t);
+									if (d != null && !d.typeParam)
+									{
+										ds.set(d.m.name, Module(d.m));
+										for (df in d.m.defs)
+										{
+											if (getDef(df).name != d.m.name)
+												ds.set(getDef(df).name, Submodule(d.m, [], df));
+											addChildDefs(d.m, ds, df, []);
+											loop(df);
+										}
+									}
+								default:
 							}
 						}
 					default:
 				}
 			}
+			loop(d);
 
 			{
 				//go through all fields' definition and normalizeType()
@@ -410,6 +420,8 @@ class Normalizer
 										//look for fields of the exact same signature:
 										for (field in c.fields)
 										{
+											if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
+												continue;
 											if (field.kwds.has("static")) continue;
 											if (sig == fieldSig(field))
 											{
@@ -623,7 +635,8 @@ class Normalizer
 		return switch(a)
 		{
 		case AType(t):
-			AType({ t : nt(t.t), final: t.final });
+			t.t = nt(t.t);
+			AType(t);
 		case AWildcardExtends(t):
 			AWildcardExtends({ t: nt(t.t), final: t.final });
 		case AWildcardSuper(t):
