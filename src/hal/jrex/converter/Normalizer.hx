@@ -216,12 +216,33 @@ class Normalizer
 		switch(d)
 		{
 		case CDef(c):
-			//add another definitionStack for the type parameters
+			//add another definitionStack for the type parameters and class extension
 			var ds = new StringMap();
 			definitionStack.push(ds);
 			for (tp in c.types)
 			{
 				ds.set(tp.name, TypeParameter);
+			}
+
+			var all = (c.extend != null ? c.extend : []).concat(c.implement != null ? c.implement : []);
+			for (c in all)
+			{
+				switch(c.t)
+				{
+					case TPath(p, t):
+						var d = lookupPath(p, t);
+						if (d != null && !d.typeParam)
+						{
+							ds.set(d.m.name, Module(d.m));
+							for (df in d.m.defs)
+							{
+								if (getDef(df).name != d.m.name)
+									ds.set(getDef(df).name, Submodule(d.m, [], df));
+								addChildDefs(d.m, ds, df, []);
+							}
+						}
+					default:
+				}
 			}
 
 			{
@@ -269,21 +290,18 @@ class Normalizer
 
 				if (c.kwds.has("abstract"))
 				{
-					trace("is abstract " + c.name);
 					function loop(iface:T)
 					{
 						var iface = tToDef(iface);
 						if (iface != null) switch(iface)
 						{
 							case CDef(c):
-								trace("looping at " + c.name);
 								if (c.extend != null) for (i in c.extend)
 									loop(i);
 								for (f in c.fields)
 									switch(f.kind)
 									{
 										case FFun(_):
-											trace("added neededfields " + fieldSig(f));
 											neededFields.set(fieldSig(f), f);
 										default:
 									}
@@ -301,7 +319,6 @@ class Normalizer
 
 					for (sig in neededFields.keys())
 					{
-						trace("found more sig " + sig);
 						var s = neededFields.get(sig);
 						s.kwds.push("public");
 						c.fields.push(s);
@@ -434,7 +451,9 @@ class Normalizer
 				for (i in c.implement)
 					normalizeType(i);
 				for (e in c.extend)
+				{
 					normalizeType(e);
+				}
 			}
 
 
