@@ -224,11 +224,23 @@ class Normalizer
 				ds.set(tp.name, TypeParameter);
 			}
 
-			function loop(def)
+			function loop(m, def)
 			{
+				var imports = new StringMap();
+				definitionStack.push(imports);
+				if (m != null)
+				{
+					addImports(m, imports);
+					for (md in packs.get(m.pack.join(".")))
+					{
+						imports.set(md.name, Module(md));
+					}
+				}
+
 				switch(def)
 				{
 					case CDef(c):
+						trace("adding defs from " + c.name);
 						var all = (c.extend != null ? c.extend : []).concat(c.implement != null ? c.implement : []);
 						for (c in all)
 						{
@@ -244,16 +256,20 @@ class Normalizer
 											if (getDef(df).name != d.m.name)
 												ds.set(getDef(df).name, Submodule(d.m, [], df));
 											addChildDefs(d.m, ds, df, []);
-											loop(df);
 										}
+										var m = d.m;
+										trace(m.pack.join(".") + "." + m.name);
+										trace("adding defs from " + getDef(d.d).name);
+										loop(m, d.d);
 									}
 								default:
 							}
 						}
 					default:
 				}
+				definitionStack.pop();
 			}
-			loop(d);
+			loop(null, d);
 
 			{
 				//go through all fields' definition and normalizeType()
