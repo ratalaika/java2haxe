@@ -206,7 +206,7 @@ class Normalizer
 		TPath(["short"], []),
 		TPath(["boolean"], []),
 		TPath(["void"], []): switch(t) { case TPath([p],_): p; default: throw "assert"; };
-		case TPath([p], _): cur.pack.join(".") + "." + p;
+		case TPath([p], _): p;
 		case TPath(p, _): p.join(".");
 		}
 	}
@@ -240,7 +240,6 @@ class Normalizer
 				switch(def)
 				{
 					case CDef(c):
-						trace("adding defs from " + c.name);
 						var all = (c.extend != null ? c.extend : []).concat(c.implement != null ? c.implement : []);
 						for (c in all)
 						{
@@ -258,8 +257,6 @@ class Normalizer
 											addChildDefs(d.m, ds, df, []);
 										}
 										var m = d.m;
-										trace(m.pack.join(".") + "." + m.name);
-										trace("adding defs from " + getDef(d.d).name);
 										loop(m, d.d);
 									}
 								default:
@@ -346,7 +343,8 @@ class Normalizer
 					for (sig in neededFields.keys())
 					{
 						var s = neededFields.get(sig);
-						s.kwds.push("public");
+						if (!s.kwds.has("public"))
+							s.kwds.push("public");
 						c.fields.push(s);
 					}
 				}
@@ -354,6 +352,8 @@ class Normalizer
 				//check overrides
 				if (!c.isInterface)
 				{
+					var overrides = [];
+					untyped c.overrides = overrides;
 					var funs = c.fields
 						.filter(function(f) return switch(f.kind) { case FFun(_): true; default: false; } );
 					var funSig = funs.map(fieldSig);
@@ -385,7 +385,7 @@ class Normalizer
 										var m = getNormalizedModule( d2.m.pack.join(".") + "." + d2.m.name );
 										if (m == null)
 										{
-											trace("WARNING: Mudle not found " + d2.m.pack.join(".") + "." + d2.m.name);
+											trace("WARNING: Module not found " + d2.m.pack.join(".") + "." + d2.m.name);
 										}
 
 										ext = { d : d2.d, p : params };
@@ -433,17 +433,25 @@ class Normalizer
 									for (f in funs)
 									{
 										var sig = funSig[i++];
+										trace(sig);
+										if (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public")))
+											continue;
 										//look for fields of the exact same signature:
 										for (field in c.fields)
 										{
-											if (!c.isInterface && (f.kwds.has("private") || (!f.kwds.has("protected") && !f.kwds.has("public"))))
+											trace('tsting ' + field.name);
+											if (!c.isInterface && (field.kwds.has("private") || (!field.kwds.has("protected") && !field.kwds.has("public"))))
 												continue;
+											trace('continue ' + fieldSig(field));
 											if (field.kwds.has("static")) continue;
+											trace('nostatic');
 											if (sig == fieldSig(field))
 											{
-												if (f.meta == null)
-													f.meta = [];
-												f.meta.push( { name:"Override", args:null, pos: f.pos } );
+												trace('iseq');
+												//if (f.meta == null)
+												//	f.meta = [];
+												//f.meta.push( { name:"Override", args:null, pos: f.pos } );
+												overrides.push(f);
 											}
 
 											nonstatics.set(field.name, true);
@@ -619,7 +627,8 @@ class Normalizer
 	function mkTPath(root:Program, def:Definition, innerStack:Array<String>, params:Array<TArg>):TPath
 	{
 		var path = null;
-		if (root == this.cur)
+		//if (root == this.cur)
+		if (false) //treat this at a higher level
 		{
 			path = [];
 			if (innerStack == null || innerStack.length == 0)

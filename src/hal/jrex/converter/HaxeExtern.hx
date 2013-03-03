@@ -175,6 +175,8 @@ class HaxeExtern
 		beginIndent();
 		nl();
 
+		var overrides = untyped c.overrides;
+
 		for (f in c.fields)
 		{
 			//don't compile private or internal
@@ -208,11 +210,11 @@ class HaxeExtern
 			switch(f.kind)
 			{
 			case FVar(vt, _):
-				var isFinal = vt.final || f.kwds.remove("final");
-				var isStatic = f.kwds.remove('static');
+				var isFinal = vt.final || f.kwds.has("final");
+				var isStatic = f.kwds.has('static');
 
-				f.kwds.remove('public');
-				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
+				f.kwds.has('public');
+				var access = f.kwds.has('protected') ? 'private ' : 'public ';
 
 				if (since && require != null) w(require);
 
@@ -236,9 +238,9 @@ class HaxeExtern
 					w('(default, null)');
 				w(' : '); w(t(vt)); w(';'); nl(); nl();
 			case FFun(fn):
-				var access = f.kwds.remove('protected') ? 'private ' : 'public ';
-				var isStatic = f.kwds.remove('static');
-				f.kwds.remove('public');
+				var access = f.kwds.has('protected') ? 'private ' : 'public ';
+				var isStatic = f.kwds.has('static');
+				f.kwds.has('public');
 				if (since && require != null) w(require);
 				if (f.name.charCodeAt(0) == '%'.code)
 				{
@@ -256,7 +258,7 @@ class HaxeExtern
 					//w("@:throws('" + t(tw) + "') ");
 				for (k in f.kwds)
 					w("@:" + k +" ");
-				if (!c.isInterface && !isStatic && f.meta != null && f.meta.exists(function(f) return f.name == "Override"))
+				if (!c.isInterface && !isStatic && f.meta != null && overrides != null && overrides.has(f))
 					w("override ");
 				w(access);
 				if (isStatic) w("static ");
